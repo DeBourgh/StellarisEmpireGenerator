@@ -13,6 +13,8 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 
+using StellarisEmpireGenerator.ViewModels;
+
 namespace StellarisEmpireGenerator
 {
 	/// <summary>
@@ -23,6 +25,13 @@ namespace StellarisEmpireGenerator
 		public MainWindow()
 		{
 			InitializeComponent();
+		}
+
+		private MainViewModel ViewModel { get { return DataContext as MainViewModel; } }
+
+		private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+		{
+			ViewModel.PersistConfig();
 		}
 	}
 }
