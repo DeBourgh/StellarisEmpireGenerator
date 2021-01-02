@@ -14,6 +14,7 @@ using System.Collections.ObjectModel;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Text.RegularExpressions;
+using StellarisEmpireGenerator.Models;
 
 namespace StellarisEmpireGenerator.ViewModels
 {
@@ -24,23 +25,12 @@ namespace StellarisEmpireGenerator.ViewModels
 
 		public MainViewModel()
 		{
-			InitializeConfig();
-			LoadFromConfig();
-
-			//if (ReloadCommand.CanExecute(null))
-			//	ReloadCommand.Execute(null);
-		}
-
-		private ConfigModel InitializeConfig()
-		{
-			ConfigModel config = null;
-
 			if (File.Exists(_configFileName))
-				ReadConfig();
+				_config = ConfigModel.LoadFromFile(_configFileName);
 			else
-				config = new ConfigModel();
+				_config = new ConfigModel();
 
-			return config;
+			LoadFromConfig();
 		}
 		private void LoadFromConfig()
 		{
@@ -164,9 +154,12 @@ namespace StellarisEmpireGenerator.ViewModels
 			var lines = FilePathsGameMechanics
 				.SelectMany(x => File.ReadAllLines(x));
 
+			File.WriteAllLines("collectedFiles.txt", lines);
+
 			foreach (var line in lines)
 			{
 				int index = line.IndexOf(COMMENT);
+
 				if (index == 0)
 					continue;
 				else if (index > 0)
@@ -178,10 +171,46 @@ namespace StellarisEmpireGenerator.ViewModels
 					allText.AppendLine(line);
 			}
 
-			return Regex
-				.Replace(allText.ToString(), @"\s+", " ")
-				.Split(' ');
+			allText
+				.Replace("{", " { ")
+				.Replace("}", " } ")
+				.Replace("=", " = ");
+
+			string allTextSingleSpace = Regex.Replace(allText.ToString(), @"\s+", " ");
+
+			// Split
+			List<string> tokens = new List<string>();
+			bool withinString = false;
+			int nextSplitStart = 0;
+			for (int i = 0; i < allTextSingleSpace.Length; i++)
+			{
+				char currentChar = allTextSingleSpace[i];
+
+				switch (currentChar)
+				{
+					case '"':
+						withinString = !withinString;
+						break;
+					case ' ':
+						int nextSplitCount = i - nextSplitStart;
+						if (nextSplitCount == 0)
+							nextSplitStart = i + 1;
+						else if (!withinString)
+						{
+							tokens.Add(allTextSingleSpace.Substring(nextSplitStart, i - nextSplitStart));
+							nextSplitStart = i + 1;
+						}
+						break;
+				}
+
+			}
+
+			return tokens
+				//.Where(s => !string.IsNullOrWhiteSpace(s))
+				.ToArray();
 		}
+
+
 
 		private const char COMMENT = '#';
 		private void Reload()
@@ -190,29 +219,34 @@ namespace StellarisEmpireGenerator.ViewModels
 			{
 				var paths = CollectFilePathsGameMechanics();
 				var tokens = Tokenize(paths);
-
-				using (TextWriter tw = new StreamWriter("parsedText.txt"))
+				using (TextWriter tw = new StreamWriter("tokens.txt"))
 				{
 					foreach (var token in tokens)
 						tw.WriteLine(token);
 				}
+				var entityModel = Entity.Parse(tokens);
+
+				var flatten = entityModel.Flatten();
+				using (TextWriter tw = new StreamWriter("flatten.txt"))
+				{
+					foreach (var flat in flatten)
+						tw.WriteLine(flat);
+				}
+
+				//int Index = 0;
+				//Entity.FindKey(entityModel, null, ref Index);
+
 			}
-			catch (Exception e) { }
+			catch (Exception e)
+			{
+				;
+			}
 		}
 
-		public void ReadConfig()
-		{
-			string input = File.ReadAllText(_configFileName);
-
-			_config = JsonConvert.DeserializeObject<ConfigModel>(input);
-		}
-		public void PersistConfig()
+		public void SaveConfigToFile()
 		{
 			SaveIntoConfig();
-
-			string output = JsonConvert.SerializeObject(_config, Formatting.Indented);
-
-			File.WriteAllText(_configFileName, output, Encoding.UTF8);
+			ConfigModel.SaveToFile(_config, _configFileName);
 		}
 
 		public string this[string PropertyName]

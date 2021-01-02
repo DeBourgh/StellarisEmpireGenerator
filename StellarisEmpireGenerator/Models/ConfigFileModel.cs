@@ -33,7 +33,23 @@ namespace StellarisEmpireGenerator.Models
 				@"common\governments\authorities",
 				@"common\governments\civics",
 				@"common\species_archetypes",
-				@"common\species_classes"
+				@"common\species_classes",
+				@"common\traits",
+				@"common\ethics"
 			};
+
+		public static ConfigModel LoadFromFile(string Path)
+		{
+			string input = File.ReadAllText(Path);
+
+			return JsonConvert.DeserializeObject<ConfigModel>(input);
+		}
+
+		public static void SaveToFile(ConfigModel Model,string Path)
+		{
+			string output = JsonConvert.SerializeObject(Model, Formatting.Indented);
+
+			File.WriteAllText(Path, output, System.Text.Encoding.UTF8);
+		}
 	}
 }
