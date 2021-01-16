@@ -6,65 +6,196 @@
         xmlns:seg="clr-namespace:StellarisEmpireGenerator.ViewModels"
         xmlns:local="clr-namespace:StellarisEmpireGenerator"
         mc:Ignorable="d"
-        Title="MainWindow" Height="565.36" Width="1388" Closing="Window_Closing">
+        Title="MainWindow" Height="688.027" Width="1388" Closing="Window_Closing"
+        xmlns:vm="clr-namespace:StellarisEmpireGenerator.Views"
+        xmlns:xc="http://schemas.xceed.com/wpf/xaml/toolkit">
     <Window.DataContext>
         <seg:MainViewModel/>
     </Window.DataContext>
     <Grid>
-        <TextBox HorizontalAlignment="Left" Height="23" Margin="10,37,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="420"
-                 Text="{Binding InstallationDirectory, ValidatesOnDataErrors=True, UpdateSourceTrigger=LostFocus}" ToolTip="{Binding ErrorDict[InstallationDirectory]}">
+        <DockPanel LastChildFill="True">
+            <Grid DockPanel.Dock="Right">
+                <ListBox MinWidth="400" ItemsSource="{Binding Empires}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <vm:EmpireView Width="200"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <!--<Button MinWidth="400">Filler</Button>-->
+            </Grid>
+            <DockPanel LastChildFill="True">
+                <DockPanel.Resources>
+                    <Style TargetType="Label">
+                        <Setter Property="HorizontalAlignment" Value="Left"/>
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                        <Setter Property="Margin" Value="3"/>
+                    </Style>
+                    <Style TargetType="Button">
+                        <Setter Property="Margin" Value="3"/>
+                        <Setter Property="Padding" Value="6,3"/>
+                    </Style>
+                </DockPanel.Resources>
+                <StackPanel DockPanel.Dock="Top" Margin="5">
+                    <Grid>
+                        <Grid.Resources>
+                            <Style TargetType="TextBox">
+                                <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                <Setter Property="Padding" Value="1,2"/>
+                                <Setter Property="Margin" Value="3"/>
+                            </Style>
+                            <Style TargetType="ComboBox">
+                                <Setter Property="HorizontalAlignment" Value="Left"/>
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                                <Setter Property="Margin" Value="3"/>
+                            </Style>
+                        </Grid.Resources>
+                        <Grid.RowDefinitions>
+                            <RowDefinition/>
+                            <RowDefinition/>
+                            <RowDefinition/>
+                            <RowDefinition/>
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition/>
+                        </Grid.ColumnDefinitions>
+                        <Label Grid.Row="0" Grid.Column="0" Content="Stellaris Installation Folder"/>
+                        <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding InstallationDirectory, ValidatesOnDataErrors=True, UpdateSourceTrigger=LostFocus}" ToolTip="{Binding ErrorDict[InstallationDirectory]}"/>
 
-        </TextBox>
-        <Label Content="Stellaris Installation Folder" HorizontalAlignment="Left" Margin="10,12,0,0" VerticalAlignment="Top"/>
-        <TextBox HorizontalAlignment="Left" Height="23" Margin="10,99,0,0" TextWrapping="Wrap" VerticalAlignment="Top" Width="420"
-                 Text="{Binding ModDirectory, ValidatesOnDataErrors=True, UpdateSourceTrigger=LostFocus}" ToolTip="{Binding ErrorDict[ModDirectory]}">
+                        <Label Grid.Row="1" Grid.Column="0" Content="Stellaris Mod Folder (optional)"/>
+                        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding ModDirectory, ValidatesOnDataErrors=True, UpdateSourceTrigger=LostFocus}" ToolTip="{Binding ErrorDict[ModDirectory]}"/>
 
-        </TextBox>
-        <Label Content="Stellaris Mod Folder (optional)" HorizontalAlignment="Left" Margin="10,74,0,0" VerticalAlignment="Top"/>
-        <Button Content="Reload" HorizontalAlignment="Left" Margin="355,163,0,0" VerticalAlignment="Top" Width="75" Command="{Binding ReloadCommand}"/>
-        <ComboBox HorizontalAlignment="Left" Margin="310,136,0,0" VerticalAlignment="Top" Width="120"
-                  ItemsSource="{Binding LocalizationOptions}"
-                  SelectedValue="{Binding UsedLocalization}"/>
-        <Label Content="Language" HorizontalAlignment="Left" Margin="243,135,0,0" VerticalAlignment="Top"/>
+                        <Label Grid.Row="2" Grid.Column="0" Content="Language"/>
+                        <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding LocalizationOptions}" SelectedValue="{Binding ActiveLocalizationKey}"/>
 
+                        <Button Grid.Row="3" Grid.Column="0" Content="Reload" Width="100" HorizontalAlignment="Left" Command="{Binding ReloadCommand}"/>
+                    </Grid>
+                </StackPanel>
+                <Grid DockPanel.Dock="Bottom" Margin="5">
+                    <StackPanel FlowDirection="RightToLeft" Orientation="Horizontal">
+                        <Button DockPanel.Dock="Bottom" HorizontalAlignment="Right" Content="Generate" Command="{Binding GenerateCommand}" CommandParameter="{Binding GenerateCount}"/>
+                        <xc:IntegerUpDown Value="{Binding GenerateCount}" Minimum="1" Maximum="99" Margin="3"/>
+                    </StackPanel>
 
+                </Grid>
+                <Grid Margin="5">
+                    <Grid.Resources>
+                        <Style TargetType="ListBox">
+                            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="ItemTemplate">
+                                <Setter.Value>
+                                    <DataTemplate>
+                                        <vm:EmpirePropertyItemView/>
+                                    </DataTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Setter Property="Margin" Value="3"/>
+                        </Style>
+                    </Grid.Resources>
+                    <Grid.RowDefinitions>
+                        <RowDefinition/>
+                        <RowDefinition/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition/>
+                        <ColumnDefinition/>
+                        <ColumnDefinition/>
+                    </Grid.ColumnDefinitions>
+                    <DockPanel Grid.Row="0" Grid.Column="0">
+                        <Label DockPanel.Dock="Top" Content="Origins"/>
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                                <Button Content="Allow All" Command="{Binding AllowAllCommand}" CommandParameter="Origin"/>
+                                <Button Content="Disallow All" Command="{Binding DisallowAllCommand}" CommandParameter="Origin"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <ListBox ItemsSource="{Binding Origins}">
+                        </ListBox>
+                    </DockPanel>
+                    <DockPanel Grid.Row="0" Grid.Column="1">
+                        <Label DockPanel.Dock="Top" Content="Civics"/>
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                                <Button Content="Allow All" Command="{Binding AllowAllCommand}" CommandParameter="Civic"/>
+                                <Button Content="Disallow All" Command="{Binding DisallowAllCommand}" CommandParameter="Civic"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <ListBox ItemsSource="{Binding Civics}">
+                        </ListBox>
+                    </DockPanel>
+                    <DockPanel Grid.Row="0" Grid.Column="2">
+                        <Label DockPanel.Dock="Top" Content="Ethics"/>
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                                <Button Content="Allow All" Command="{Binding AllowAllCommand}" CommandParameter="Ethic"/>
+                                <Button Content="Disallow All" Command="{Binding DisallowAllCommand}" CommandParameter="Ethic"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <ListBox ItemsSource="{Binding Ethics}">
+                        </ListBox>
+                    </DockPanel>
+                    <DockPanel Grid.Row="1" Grid.Column="0">
+                        <Label DockPanel.Dock="Top" Content="Authorities"/>
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                                <Button Content="Allow All" Command="{Binding AllowAllCommand}" CommandParameter="Authority"/>
+                                <Button Content="Disallow All" Command="{Binding DisallowAllCommand}" CommandParameter="Authority"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <ListBox ItemsSource="{Binding Authorities}">
+                        </ListBox>
+                    </DockPanel>
+                    <DockPanel Grid.Row="1" Grid.Column="1">
+                        <Label DockPanel.Dock="Top" Content="Traits"/>
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                                <Button Content="Allow All" Command="{Binding AllowAllCommand}" CommandParameter="Trait"/>
+                                <Button Content="Disallow All" Command="{Binding DisallowAllCommand}" CommandParameter="Trait"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <ListBox ItemsSource="{Binding Traits}">
+                        </ListBox>
+                    </DockPanel>
+                    <DockPanel Grid.Row="1" Grid.Column="2">
+                        <Label DockPanel.Dock="Top" Content="Species"/>
+                        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                                <Button Content="Allow All" Command="{Binding AllowAllCommand}" CommandParameter="Species"/>
+                                <Button Content="Disallow All" Command="{Binding DisallowAllCommand}" CommandParameter="Species"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <ListBox ItemsSource="{Binding Species}">
+                        </ListBox>
+                    </DockPanel>
+                </Grid>
+            </DockPanel>
+        </DockPanel>
+        <!--
         <DockPanel HorizontalAlignment="Left" Height="276" Margin="10,205,0,0" VerticalAlignment="Top" Width="229" Name="PanelOriginsSetup">
             <TextBlock Text="Origins Setup" DockPanel.Dock="Top" Margin="5"/>
             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
-                <RadioButton Content="Allow All" Margin="5" GroupName="Origin"/>
-                <RadioButton Content="Exclude" Margin="5" GroupName="Origin"/>
-                <RadioButton Content="Use Only" Margin="5" GroupName="Origin"/>
+                <Button Content="Allow All" Padding="5" Margin="5"/>
+                <Button Content="Disallow All" Padding="5" Margin="5"/>
             </StackPanel>
-            <ListBox>
-
+            <ListBox ItemsSource="{Binding Origins}" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <vm:EmpirePropertyItemView/>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
             </ListBox>
+
         </DockPanel>
-        <DockPanel HorizontalAlignment="Left" Height="276" Margin="244,205,0,0" VerticalAlignment="Top" Width="229" x:Name="PanelCivicsSetup">
-            <TextBlock Text="Civics Setup" DockPanel.Dock="Top" Margin="5"/>
+        <DockPanel HorizontalAlignment="Left" Height="276" Margin="244,205,0,0" VerticalAlignment="Top" Width="229" x:Name="PanelOriginsSetup_Copy">
+            <TextBlock DockPanel.Dock="Top" Margin="5"><Run Text="Civics "/><Run Text="Setup"/></TextBlock>
             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
-                <RadioButton Content="Allow All" Margin="5" GroupName="Origin"/>
-                <RadioButton Content="Exclude" Margin="5" GroupName="Origin"/>
-                <RadioButton Content="Use Only" Margin="5" GroupName="Origin"/>
+                <Button Content="Allow All" Padding="5" Margin="5"/>
+                <Button Content="Disallow All" Padding="5" Margin="5"/>
             </StackPanel>
             <ListBox/>
-        </DockPanel>
-        <DockPanel HorizontalAlignment="Left" Height="276" Margin="478,205,0,0" VerticalAlignment="Top" Width="229" x:Name="PanelTraitsSetup">
-            <TextBlock Text="Traits Setup" DockPanel.Dock="Top" Margin="5"/>
-            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
-                <RadioButton Content="Allow All" Margin="5" GroupName="Origin"/>
-                <RadioButton Content="Exclude" Margin="5" GroupName="Origin"/>
-                <RadioButton Content="Use Only" Margin="5" GroupName="Origin"/>
-            </StackPanel>
-            <ListBox/>
-        </DockPanel>
-        <DockPanel HorizontalAlignment="Left" Height="276" Margin="712,205,0,0" VerticalAlignment="Top" Width="229" x:Name="PanelTraitsSetup_Copy">
-            <TextBlock Text="Ethics Setup" DockPanel.Dock="Top" Margin="5"/>
-            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
-                <RadioButton Content="Allow All" Margin="5" GroupName="Origin"/>
-                <RadioButton Content="Exclude" Margin="5" GroupName="Origin"/>
-                <RadioButton Content="Use Only" Margin="5" GroupName="Origin"/>
-            </StackPanel>
-            <ListBox/>
-        </DockPanel>
+        </DockPanel>-->
     </Grid>
 </Window>

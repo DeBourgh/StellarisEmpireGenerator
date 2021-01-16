@@ -7,25 +7,20 @@ namespace StellarisEmpireGenerator.Models
 {
 	public class ConfigModel
 	{
-		public ConfigModel()
+		private ConfigModel()
 		{
 
 		}
 
 		public string InstallationDir { get; set; } = @"..\steamapps\common\Stellaris";
 		public string ModDir { get; set; } = @"..\steamapps\workshop\content\281990";
-		//public string[] LocalizationDirs { get; set; } = new string[]
-		//	{
-		//		@"localisation\english",
-		//		@"localisation\german"
-		//	};
-		public Dictionary<string, string> Localizations { get; set; } = new Dictionary<string, string>
-			{
-				{ "English", @"localisation\english" },
-				{ "German", @"localisation\german" },
 
-			};
-		public string UsedLocalization { get; set; } = "English";
+		public ICollection<string> LocalizationDirs { get; } = new List<string>();
+
+		public IList<string> LocalizationKeys { get; } = new List<string>();
+
+		public string ActiveLocalizationKey { get; set; } = "english";
+
 
 		public string[] SubDirs { get; set; } = new string[]
 			{
@@ -45,11 +40,22 @@ namespace StellarisEmpireGenerator.Models
 			return JsonConvert.DeserializeObject<ConfigModel>(input);
 		}
 
-		public static void SaveToFile(ConfigModel Model,string Path)
+		public static void SaveToFile(ConfigModel Model, string Path)
 		{
 			string output = JsonConvert.SerializeObject(Model, Formatting.Indented);
 
 			File.WriteAllText(Path, output, System.Text.Encoding.UTF8);
+		}
+
+		public static ConfigModel ByDefault()
+		{
+			ConfigModel cm = new ConfigModel();
+			cm.LocalizationDirs.Add("localisation");
+			cm.LocalizationDirs.Add("localisation_synced");
+			cm.LocalizationKeys.Add("english");
+			cm.LocalizationKeys.Add("german");
+
+			return cm;
 		}
 	}
 }
