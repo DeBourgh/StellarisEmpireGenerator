@@ -2,17 +2,21 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 
 using StellarisEmpireGenerator.Core;
 
 namespace StellarisEmpireGenerator.Models
 {
-	public abstract class EmpireProperty
+	[JsonObject(IsReference = true)]
+	public class EmpireProperty
 	{
 		protected static readonly string[] LogicGatesAsString = Enum.GetNames(typeof(Condition)).Select(e => e.ToLower()).ToArray();
 		protected static readonly string[] EmpirePropertyTypesAsString = Enum.GetNames(typeof(EmpirePropertyType)).Select(e => e.ToLower()).ToArray();
@@ -27,87 +31,45 @@ namespace StellarisEmpireGenerator.Models
 
 		#region Properties
 
-		public string Identifier { get; private set; } = string.Empty;
-		public string Name { get; private set; } = string.Empty;
+		public string Identifier { get; set; } = string.Empty;
+
+		//public string Name { get; set; } = string.Empty;
+
 		public int Weight { get; set; } = 1;
-		public EmpirePropertyType Type { get; private set; } = EmpirePropertyType.Unknown;
-		public IEnumerable<string> Dlc { get; private set; } = Enumerable.Empty<string>();
 
-		public Constraint<EmpireProperty> Constraints { get; private set; }
+		public bool IsAllowed { get; set; } = true;
 
+		public EmpirePropertyType Type { get; set; } = EmpirePropertyType.Unknown;
+
+		public Constraint<EmpireProperty> Constraints { get; set; }
+
+		[JsonIgnore]
 		protected Constraint<EmpireProperty> Possible { get; private set; } = Constraint<EmpireProperty>.True;
+		[JsonIgnore]
 		protected Constraint<EmpireProperty> Potential { get; private set; } = Constraint<EmpireProperty>.True;
+
+		[JsonIgnore]
 		public Entity SourceEntity { get; private set; }
 
+		//[JsonIgnore]
+		[JsonIgnore]
 		public EmpirePropertyAuthority AsAuthority { get => this as EmpirePropertyAuthority; }
+		[JsonIgnore]
 		public EmpirePropertyCivic AsCivic { get => this as EmpirePropertyCivic; }
+		[JsonIgnore]
 		public EmpirePropertyEthic AsEthic { get => this as EmpirePropertyEthic; }
+		[JsonIgnore]
 		public EmpirePropertyOrigin AsOrigin { get => this as EmpirePropertyOrigin; }
+		[JsonIgnore]
 		public EmpirePropertySpecies AsSpecies { get => this as EmpirePropertySpecies; }
+		[JsonIgnore]
 		public EmpirePropertyTrait AsTrait { get => this as EmpirePropertyTrait; }
 
+
+
 		#endregion
-		public static IEnumerable<EmpireProperty> FromEntityRoot(Entity Root)
-		{
-			ICollection<EmpireProperty> properties = new List<EmpireProperty>();
-			ICollection<EmpireProperty> filter = new List<EmpireProperty>();
 
-			if (!Root.Children.Any())
-				return null;
-			else
-			{
-				var children = Root.Children;
-
-				ICollection<(EmpireProperty Prop, IEnumerable<string> Opposites)> traitOpposites = new LinkedList<(EmpireProperty, IEnumerable<string>)>();
-
-				// Extract base properties
-				foreach (var entity in children)
-				{
-					EmpireProperty ep;
-
-					if ((ep = EmpirePropertyEthic.EthicFromNode(entity)) != null) { }
-					else if ((ep = EmpirePropertyAuthority.AuthorityFromNode(entity)) != null) { }
-					else if ((ep = EmpirePropertyOrigin.OriginFromNode(entity)) != null) { }
-					else if ((ep = EmpirePropertyCivic.CivicFromNode(entity)) != null) { }
-					else if ((ep = EmpirePropertyTrait.TraitFromNode(entity)) != null) { }
-					else if ((ep = EmpirePropertySpecies.SpeciesFromNode(entity)) != null) { }
-
-					if (ep != null)
-						properties.Add(ep);
-				}
-
-				//var types = Enum.GetNames(typeof(EmpirePropertyType)).Select(x => x.ToLower()).ToArray();
-				//var children2 = properties.SelectMany(e => e.SourceEntity.Children.WhereKey("possible").Concat(e.SourceEntity.Children.WhereKey("potential")));
-				////var children2 = properties.Where(e => e.SourceEntity.Children.ContainsKey("possible") || e.SourceEntity.Children.ContainsKey("potential")).Select(x => x.SourceEntity);
-				//var children3 = children2.SelectMany(e => e.Children.Where(e2 => !types.Contains(e2.Key)));
-
-				foreach (var prop in properties)
-				{
-					prop.Possible = ExtractContraints("possible", prop.SourceEntity, properties, ConstraintAllocator);
-					prop.Potential = ExtractContraints("potential", prop.SourceEntity, properties, ConstraintAllocator);
-
-					prop.UpdateRelationsToOtherEmpireProperties(properties);
-
-					prop.MergeConstraints();
-
-					if (!properties.Any(p => prop.Potential.Evaluate(p, (p1, p2) => p1.Identifier == p2.Identifier)))
-						filter.Add(prop);
-				}
-			}
-
-			return properties.Except(filter);
-		}
-
-		public static void ApplyLanguage(IEnumerable<EmpireProperty> Properties, LanguageDictionary Dict)
-		{
-			foreach (var prop in Properties)
-			{
-				prop.Name = Dict[prop.Identifier];
-
-				if (string.IsNullOrWhiteSpace(prop.Name))
-					prop.Name = prop.Identifier;
-			}
-		}
+		#region Extraction Logic
 
 		private void MergeConstraints()
 		{
@@ -164,21 +126,6 @@ namespace StellarisEmpireGenerator.Models
 
 			return null;
 		}
-		//private static object HostHasDlcAllocator(Entity Node, IEnumerable<EmpireProperty> Properties)
-		//{
-		//	if (Node.Key == "host_has_dlc")
-		//	{
-		//		var entity = Properties.FirstOrDefault(e => e.Identifier == Node.Text);
-
-		//		if (entity != null)
-		//			return entity;
-		//		else
-		//			return Constraint<EmpireProperty>.False;
-		//	}
-
-		//	return null;
-		//}
-
 		private static Constraint<EmpireProperty> ExtractSubConstraints(Entity Node, IEnumerable<EmpireProperty> Properties, Func<Entity, IEnumerable<EmpireProperty>, object> Allocator)
 		{
 			Constraint<EmpireProperty> constraint = new Constraint<EmpireProperty>(Condition.Each);
@@ -236,15 +183,94 @@ namespace StellarisEmpireGenerator.Models
 			}
 		}
 
-		//protected static IEnumerable<EmpirePropertyTrait> ExtractPotentialSecondarySpecies(Entity Node, IEnumerable<EmpireProperty> Properties)
-		//{
-		//	return Properties
-		//		.Where(p => p is EmpirePropertyTrait);
+		#endregion
 
-		//	return Node.Children
-		//		.FirstOrDefaultKey("has_secondary_species")?.Descendants
-		//		.Where(e => e.Text != null)
-		//		.Select(e => e.Text);
+		#region IO
+
+		public static IEnumerable<EmpireProperty> FromEntityRoot(Entity Root)
+		{
+			ICollection<EmpireProperty> properties = new List<EmpireProperty>();
+			ICollection<EmpireProperty> filter = new List<EmpireProperty>();
+
+			if (!Root.Children.Any())
+				return null;
+			else
+			{
+				var children = Root.Children;
+
+				ICollection<(EmpireProperty Prop, IEnumerable<string> Opposites)> traitOpposites = new LinkedList<(EmpireProperty, IEnumerable<string>)>();
+
+				// Extract base properties
+				foreach (var entity in children)
+				{
+					EmpireProperty ep;
+
+					if ((ep = EmpirePropertyEthic.EthicFromNode(entity)) != null) { }
+					else if ((ep = EmpirePropertyAuthority.AuthorityFromNode(entity)) != null) { }
+					else if ((ep = EmpirePropertyOrigin.OriginFromNode(entity)) != null) { }
+					else if ((ep = EmpirePropertyCivic.CivicFromNode(entity)) != null) { }
+					else if ((ep = EmpirePropertyTrait.TraitFromNode(entity)) != null) { }
+					else if ((ep = EmpirePropertySpecies.SpeciesFromNode(entity)) != null) { }
+
+					if (ep != null)
+						properties.Add(ep);
+				}
+
+				//var types = Enum.GetNames(typeof(EmpirePropertyType)).Select(x => x.ToLower()).ToArray();
+				//var children2 = properties.SelectMany(e => e.SourceEntity.Children.WhereKey("possible").Concat(e.SourceEntity.Children.WhereKey("potential")));
+				////var children2 = properties.Where(e => e.SourceEntity.Children.ContainsKey("possible") || e.SourceEntity.Children.ContainsKey("potential")).Select(x => x.SourceEntity);
+				//var children3 = children2.SelectMany(e => e.Children.Where(e2 => !types.Contains(e2.Key)));
+
+				foreach (var prop in properties)
+				{
+					prop.Possible = ExtractContraints("possible", prop.SourceEntity, properties, ConstraintAllocator);
+					prop.Potential = ExtractContraints("potential", prop.SourceEntity, properties, ConstraintAllocator);
+
+					prop.UpdateRelationsToOtherEmpireProperties(properties);
+
+					prop.MergeConstraints();
+
+					if (!properties.Any(p => prop.Potential.Evaluate(p, (p1, p2) => p1.Identifier == p2.Identifier)))
+						filter.Add(prop);
+				}
+			}
+
+			return properties.Except(filter);
+		}
+
+		public static List<EmpireProperty> FromFile(string Path)
+		{
+			string input = File.ReadAllText(Path);
+
+			return JsonConvert.DeserializeObject<List<EmpireProperty>>(input, new JsonSerializerSettings() { TypeNameHandling = TypeNameHandling.All });
+		}
+
+		public static void ToFile(List<EmpireProperty> Model, string Path)
+		{
+			string output = JsonConvert.SerializeObject(
+				Model,
+				Formatting.Indented,
+				new JsonSerializerSettings()
+				{
+					ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
+					PreserveReferencesHandling = PreserveReferencesHandling.All,
+					TypeNameHandling = TypeNameHandling.All
+				});
+
+			File.WriteAllText(Path, output, System.Text.Encoding.UTF8);
+		}
+
+		#endregion
+
+		//public static void ApplyLanguage(IEnumerable<EmpireProperty> Properties, LanguageDictionary Dict)
+		//{
+		//	foreach (var prop in Properties)
+		//	{
+		//		prop.Name = Dict[prop.Identifier];
+
+		//		if (string.IsNullOrWhiteSpace(prop.Name))
+		//			prop.Name = prop.Identifier;
+		//	}
 		//}
 
 		private static IEnumerable<string> ExtractDlc(Entity Node)
@@ -254,19 +280,16 @@ namespace StellarisEmpireGenerator.Models
 			//	Node.Descendants.WhereKey("host_has_dlc", e => e.Ancestors.ContainsKey("playable"))?.Text ?? null;
 		}
 
+		protected virtual void UpdateRelationsToOtherEmpireProperties(IEnumerable<EmpireProperty> Properties) { }
+
+
+
+
+		#region Object Overrides
+
 		public override string ToString()
 		{
-			switch (Type)
-			{
-				default:
-					return string.Format("{0}: (Name: {2}, Type: {1}, Dlc: {3}, Weight: {4})",
-						Identifier,
-						Type,
-						Name,
-						Dlc,
-						Weight);
-			}
-
+			return Identifier;
 		}
 
 		public override bool Equals(object obj)
@@ -282,37 +305,90 @@ namespace StellarisEmpireGenerator.Models
 			return Identifier.GetHashCode();
 		}
 
-		protected abstract void UpdateRelationsToOtherEmpireProperties(IEnumerable<EmpireProperty> Properties);
+		#endregion
 
-		public static IEnumerable<EmpireProperty> LoadFromFile(string Path)
-		{
-			string input = File.ReadAllText(Path);
-
-			return JsonConvert.DeserializeObject<IEnumerable<EmpireProperty>>(input);
-		}
-
-		public static void SaveToFile(IEnumerable<EmpireProperty> Model, string Path)
-		{
-			string output = JsonConvert.SerializeObject(Model, Formatting.Indented);
-
-			File.WriteAllText(Path, output, System.Text.Encoding.UTF8);
-		}
 	}
 
+	[JsonObject(IsReference = true)]
+	public sealed class EmpirePropertyAuthority : EmpireProperty
+	{
+		public EmpirePropertyAuthority() : base() { }
+
+		private EmpirePropertyAuthority(Entity SourceEntity) : base(SourceEntity, EmpirePropertyType.Authority) { }
+
+		private static bool IsAuthority(Entity Node)
+		{
+			Entity aiEmpire = Node.Descendants.FirstOrDefaultPair("value", "ai_empire");
+
+			return
+				Node.Key.StartsWith("auth_") &&
+				(!aiEmpire?.Parent.Key.Equals("country_type") ?? true) &&
+				(!aiEmpire?.Parent.Parent.Key.Equals("potential") ?? true);
+		}
+
+		internal static EmpirePropertyAuthority AuthorityFromNode(Entity Node)
+		{
+			if (IsAuthority(Node))
+				return new EmpirePropertyAuthority(Node);
+			else
+				return null;
+		}
+
+		protected override void UpdateRelationsToOtherEmpireProperties(IEnumerable<EmpireProperty> Properties) { }
+	}
+
+	[JsonObject(IsReference = true)]
+	public sealed class EmpirePropertyCivic : EmpireProperty
+	{
+		public EmpirePropertyCivic() : base() { }
+
+		private EmpirePropertyCivic(Entity SourceEntity) : base(SourceEntity, EmpirePropertyType.Civics) { }
+
+		//public IEnumerable<EmpirePropertyTrait> SecondarySpeciesTraits { get; private set; } = Enumerable.Empty<EmpirePropertyTrait>();
+
+		private static bool IsCivic(Entity Node)
+		{
+			return
+				Node.Key.StartsWith("civic_") &&
+				!Node.Descendants.ContainsKey("country_type");
+		}
+
+		internal static EmpirePropertyCivic CivicFromNode(Entity Node)
+		{
+			if (IsCivic(Node))
+				return new EmpirePropertyCivic(Node);
+			else
+				return null;
+		}
+
+		protected override void UpdateRelationsToOtherEmpireProperties(IEnumerable<EmpireProperty> Properties) { }
+	}
+
+	[JsonObject(IsReference = true)]
 	public sealed class EmpirePropertyEthic : EmpireProperty
 	{
+		public EmpirePropertyEthic() : base() { }
 		private EmpirePropertyEthic(Entity SourceEntity) : base(SourceEntity, EmpirePropertyType.Ethics)
 		{
 			EthicCost = ExtractEthicCost(SourceEntity);
 			EthicCategory = ExtractEthicCategory(SourceEntity);
 		}
 
-		public int EthicCost { get; private set; } = 1;
+		public int EthicCost { get; set; } = 1;
 
-		public string EthicCategory { get; private set; } = string.Empty;
-		public EmpirePropertyEthic NonFanaticVariant { get; private set; } = null;
-		public EmpirePropertyEthic FanaticVariant { get; private set; } = null;
+		public string EthicCategory { get; set; } = string.Empty;
 
+		[JsonProperty(ReferenceLoopHandling = ReferenceLoopHandling.Ignore, IsReference = true)]
+		public EmpirePropertyEthic NonFanaticVariant { get; set; } = null;
+
+		[JsonProperty(ReferenceLoopHandling = ReferenceLoopHandling.Ignore, IsReference = true)]
+		public EmpirePropertyEthic FanaticVariant { get; set; } = null;
+
+		//[DataMember]
+		//private string NonFanaticVariantId { get; set; }
+		//[DataMember]
+		//private string FanaticVariantId { get; set; }
+		[JsonIgnore]
 		public bool IsFanatic { get => FanaticVariant != null; }
 
 		private static int ExtractEthicCost(Entity Node)
@@ -353,44 +429,28 @@ namespace StellarisEmpireGenerator.Models
 				var fntProperty = Properties.First(p => p.Identifier == fnt.Text) as EmpirePropertyEthic;
 
 				FanaticVariant = fntProperty;
+				//FanaticVariant.FanaticVariantId = fntProperty.Identifier;
+
 				NonFanaticVariant = this;
+				//NonFanaticVariantId = this.Identifier;
 
 				fntProperty.FanaticVariant = fntProperty;
+				//fntProperty.FanaticVariantId = fntProperty.Identifier;
+
 				fntProperty.NonFanaticVariant = this;
+				//fntProperty.NonFanaticVariantId = this.Identifier;
 			}
 		}
 	}
 
-	public sealed class EmpirePropertyAuthority : EmpireProperty
-	{
-		private EmpirePropertyAuthority(Entity SourceEntity) : base(SourceEntity, EmpirePropertyType.Authority) { }
-
-		private static bool IsAuthority(Entity Node)
-		{
-			Entity aiEmpire = Node.Descendants.FirstOrDefaultPair("value", "ai_empire");
-
-			return
-				Node.Key.StartsWith("auth_") &&
-				(!aiEmpire?.Parent.Key.Equals("country_type") ?? true) &&
-				(!aiEmpire?.Parent.Parent.Key.Equals("potential") ?? true);
-		}
-
-		internal static EmpirePropertyAuthority AuthorityFromNode(Entity Node)
-		{
-			if (IsAuthority(Node))
-				return new EmpirePropertyAuthority(Node);
-			else
-				return null;
-		}
-
-		protected override void UpdateRelationsToOtherEmpireProperties(IEnumerable<EmpireProperty> Properties) { }
-	}
-
+	[JsonObject(IsReference = true)]
 	public sealed class EmpirePropertyOrigin : EmpireProperty
 	{
+		public EmpirePropertyOrigin() : base() { }
+
 		private EmpirePropertyOrigin(Entity SourceEntity) : base(SourceEntity, EmpirePropertyType.Origin) { }
 
-		public IEnumerable<EmpirePropertyTrait> SecondarySpeciesTraits { get; private set; } = Enumerable.Empty<EmpirePropertyTrait>();
+		//public IEnumerable<EmpirePropertyTrait> SecondarySpeciesTraits { get; private set; } = Enumerable.Empty<EmpirePropertyTrait>();
 
 		private static bool IsOrigin(Entity Node)
 		{
@@ -410,23 +470,67 @@ namespace StellarisEmpireGenerator.Models
 		protected override void UpdateRelationsToOtherEmpireProperties(IEnumerable<EmpireProperty> Properties) { }
 	}
 
-	public sealed class EmpirePropertyCivic : EmpireProperty
+	[JsonObject(IsReference = true)]
+	public sealed class EmpirePropertySpecies : EmpireProperty
 	{
-		private EmpirePropertyCivic(Entity SourceEntity) : base(SourceEntity, EmpirePropertyType.Civics) { }
+		public EmpirePropertySpecies() : base() { }
 
-		public IEnumerable<EmpirePropertyTrait> SecondarySpeciesTraits { get; private set; } = Enumerable.Empty<EmpirePropertyTrait>();
-
-		private static bool IsCivic(Entity Node)
+		private EmpirePropertySpecies(Entity SourceEntity) : base(SourceEntity, EmpirePropertyType.Species)
 		{
-			return
-				Node.Key.StartsWith("civic_") &&
-				!Node.Descendants.ContainsKey("country_type");
+			Archetype = ExtractArchetype(SourceEntity);
+			CanBeSecondarySpecies = ExtractCanBeSecondary(SourceEntity);
+
+			(int TraitPoints, int MaxTraitPoints) = ExtractTraitPoints(SourceEntity);
+			this.TraitPoints = TraitPoints;
+			this.MaxTraitPoints = MaxTraitPoints;
 		}
 
-		internal static EmpirePropertyCivic CivicFromNode(Entity Node)
+		public string Archetype { get; set; } = string.Empty;
+		public int MaxTraitPoints { get; set; } = default;
+		public int TraitPoints { get; set; } = default;
+
+		public bool CanBeSecondarySpecies { get; set; } = true;
+
+		private static string ExtractArchetype(Entity Node)
 		{
-			if (IsCivic(Node))
-				return new EmpirePropertyCivic(Node);
+			return Node.Children.FirstOrDefaultKey("archetype")?.Text ?? null;
+		}
+		private static bool ExtractCanBeSecondary(Entity Node)
+		{
+			return !Node.Children.FirstOrDefaultPair("always", "no")?.Ancestors.ContainsKey("possible_secondary") ?? true;
+		}
+		private static (int TraitPoints, int MaxTraitPoints) ExtractTraitPoints(Entity Node)
+		{
+			Entity nodeArchetype = Node.Children.FirstOrDefaultKey("archetype");
+			Entity archetype = Node.Parent.Children.FirstOrDefaultKey(nodeArchetype.Text);
+
+			Entity inheriting;
+			if ((inheriting = archetype.Children.FirstOrDefaultKey("inherit_trait_points_from")) != null)
+				archetype = Node.Parent.Children.FirstOrDefaultKey(inheriting.Text);
+
+			if (!int.TryParse(archetype.Children.FirstOrDefaultKey("species_trait_points").Text, out int traitPoints))
+				int.TryParse(Node.Parent.Children.FirstOrDefaultKey(archetype.Children.FirstOrDefaultKey("species_trait_points").Text).Text, out traitPoints);
+
+			if (!int.TryParse(archetype.Children.FirstOrDefaultKey("species_max_traits").Text, out int maxTraitPoints))
+				int.TryParse(Node.Parent.Children.FirstOrDefaultKey(archetype.Children.FirstOrDefaultKey("species_max_traits").Text).Text, out maxTraitPoints);
+
+			return (
+				traitPoints,
+				maxTraitPoints
+				);
+		}
+
+		private static bool IsSpecies(Entity Node)
+		{
+			return
+				Node.Children.ContainsKey("archetype") &&
+				(!Node.Descendants.FirstOrDefaultPair("always", "no")?.Ancestors.ContainsKey("playable") ?? true);
+		}
+
+		internal static EmpirePropertySpecies SpeciesFromNode(Entity Node)
+		{
+			if (IsSpecies(Node))
+				return new EmpirePropertySpecies(Node);
 			else
 				return null;
 		}
@@ -434,18 +538,22 @@ namespace StellarisEmpireGenerator.Models
 		protected override void UpdateRelationsToOtherEmpireProperties(IEnumerable<EmpireProperty> Properties) { }
 	}
 
+	[JsonObject(IsReference = true)]
 	public sealed class EmpirePropertyTrait : EmpireProperty
 	{
+		public EmpirePropertyTrait() : base() { }
+
 		private EmpirePropertyTrait(Entity SourceEntity) : base(SourceEntity, EmpirePropertyType.Trait)
 		{
 			TraitCost = ExtractTraitCost(SourceEntity);
 		}
 
 		private IEnumerable<EmpireProperty> TraitAllowedSpecies { get; set; } = null;
-
-		public int TraitCost { get; private set; } = default;
-
 		private IEnumerable<EmpireProperty> TraitOpposites { get; set; } = null;
+
+		public int TraitCost { get; set; } = default;
+
+
 
 		private static bool IsTrait(Entity Node)
 		{
@@ -554,70 +662,9 @@ namespace StellarisEmpireGenerator.Models
 		}
 	}
 
-	public sealed class EmpirePropertySpecies : EmpireProperty
-	{
-		private EmpirePropertySpecies(Entity SourceEntity) : base(SourceEntity, EmpirePropertyType.Species)
-		{
-			Archetype = ExtractArchetype(SourceEntity);
-			CanBeSecondarySpecies = ExtractCanBeSecondary(SourceEntity);
 
-			(int TraitPoints, int MaxTraitPoints) = ExtractTraitPoints(SourceEntity);
-			this.TraitPoints = TraitPoints;
-			this.MaxTraitPoints = MaxTraitPoints;
-		}
 
-		public string Archetype { get; private set; } = string.Empty;
-		public int MaxTraitPoints { get; private set; } = default;
-		public int TraitPoints { get; private set; } = default;
-		public bool CanBeSecondarySpecies { get; set; } = true;
-
-		private static string ExtractArchetype(Entity Node)
-		{
-			return Node.Children.FirstOrDefaultKey("archetype")?.Text ?? null;
-		}
-		private static bool ExtractCanBeSecondary(Entity Node)
-		{
-			return !Node.Children.FirstOrDefaultPair("always", "no")?.Ancestors.ContainsKey("possible_secondary") ?? true;
-		}
-		private static (int TraitPoints, int MaxTraitPoints) ExtractTraitPoints(Entity Node)
-		{
-			Entity nodeArchetype = Node.Children.FirstOrDefaultKey("archetype");
-			Entity archetype = Node.Parent.Children.FirstOrDefaultKey(nodeArchetype.Text);
-
-			Entity inheriting;
-			if ((inheriting = archetype.Children.FirstOrDefaultKey("inherit_trait_points_from")) != null)
-				archetype = Node.Parent.Children.FirstOrDefaultKey(inheriting.Text);
-
-			if (!int.TryParse(archetype.Children.FirstOrDefaultKey("species_trait_points").Text, out int traitPoints))
-				int.TryParse(Node.Parent.Children.FirstOrDefaultKey(archetype.Children.FirstOrDefaultKey("species_trait_points").Text).Text, out traitPoints);
-
-			if (!int.TryParse(archetype.Children.FirstOrDefaultKey("species_max_traits").Text, out int maxTraitPoints))
-				int.TryParse(Node.Parent.Children.FirstOrDefaultKey(archetype.Children.FirstOrDefaultKey("species_max_traits").Text).Text, out maxTraitPoints);
-
-			return (
-				traitPoints,
-				maxTraitPoints
-				);
-		}
-
-		private static bool IsSpecies(Entity Node)
-		{
-			return
-				Node.Children.ContainsKey("archetype") &&
-				(!Node.Descendants.FirstOrDefaultPair("always", "no")?.Ancestors.ContainsKey("playable") ?? true);
-		}
-
-		internal static EmpirePropertySpecies SpeciesFromNode(Entity Node)
-		{
-			if (IsSpecies(Node))
-				return new EmpirePropertySpecies(Node);
-			else
-				return null;
-		}
-
-		protected override void UpdateRelationsToOtherEmpireProperties(IEnumerable<EmpireProperty> Properties) { }
-	}
-
+	[JsonObject(IsReference = true)]
 	public class Constraint<T>
 	{
 		public Constraint(Condition LogicGate)
@@ -627,8 +674,10 @@ namespace StellarisEmpireGenerator.Models
 
 		public Condition LogicGate { get; set; }
 
+		[JsonProperty(ReferenceLoopHandling = ReferenceLoopHandling.Ignore, IsReference = true)]
 		public ICollection<T> Objects { get; } = new LinkedList<T>();
 
+		[JsonProperty(ReferenceLoopHandling = ReferenceLoopHandling.Ignore, IsReference = true)]
 		public ICollection<Constraint<T>> SubConstraints { get; } = new LinkedList<Constraint<T>>();
 
 		public EmpirePropertyType Group { get; set; } = EmpirePropertyType.Unknown;
@@ -715,12 +764,13 @@ namespace StellarisEmpireGenerator.Models
 
 	public enum EmpirePropertyType
 	{
-		Civics,
-		Trait,
-		Origin,
 		Authority,
+		Civics,
 		Ethics,
+		Origin,
 		Species,
+		Trait,
+
 		Unknown,
 	}
 }

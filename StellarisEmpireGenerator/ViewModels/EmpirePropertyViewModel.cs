@@ -1,11 +1,6 @@
 ﻿using StellarisEmpireGenerator.Core;
 using StellarisEmpireGenerator.Models;
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Input;
 
 namespace StellarisEmpireGenerator.ViewModels
@@ -16,21 +11,19 @@ namespace StellarisEmpireGenerator.ViewModels
 		public EmpirePropertyViewModel(EmpireProperty Property)
 		{
 			Source = Property;
-			_weight = Source.Weight;
+			//this.Name = Name;
+			IsAllowed = Source.IsAllowed;
+			Weight = Source.Weight;
 		}
 
 		public EmpireProperty Source { get; private set; }
 
-		private bool _isSelected = false;
-		public bool IsSelected
+		private string _name = string.Empty;
+		public string Name
 		{
-			get => _isSelected;
-			set { SetProperty(ref _isSelected, value); }
+			get => _name;
+			set { SetProperty(ref _name, value); }
 		}
-
-		public string Identifier { get => Source.Identifier; }
-		//private string _name;
-		public string Name { get => Source.Name; }
 
 		private int _weight;
 		public int Weight
@@ -47,7 +40,11 @@ namespace StellarisEmpireGenerator.ViewModels
 		public bool IsAllowed
 		{
 			get => _isAllowed;
-			set { SetProperty(ref _isAllowed, value); }
+			set
+			{
+				SetProperty(ref _isAllowed, value);
+				Source.IsAllowed = _isAllowed;
+			}
 		}
 
 		private bool _isRestricted = false;
@@ -58,6 +55,7 @@ namespace StellarisEmpireGenerator.ViewModels
 		}
 
 		private ICommand _switchIsAllowedCommand;
+
 		public ICommand SwitchIsAllowedCommand
 		{
 			get

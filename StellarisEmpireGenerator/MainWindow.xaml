@@ -7,7 +7,8 @@
         xmlns:local="clr-namespace:StellarisEmpireGenerator"
         mc:Ignorable="d"
         Title="MainWindow" Height="688.027" Width="1388" Closing="Window_Closing"
-        xmlns:vm="clr-namespace:StellarisEmpireGenerator.Views"
+        xmlns:v="clr-namespace:StellarisEmpireGenerator.Views"
+        xmlns:m="clr-namespace:StellarisEmpireGenerator.Models"
         xmlns:xc="http://schemas.xceed.com/wpf/xaml/toolkit">
     <Window.DataContext>
         <seg:MainViewModel/>
@@ -18,7 +19,7 @@
                 <ListBox MinWidth="400" ItemsSource="{Binding Empires}">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <vm:EmpireView Width="200"/>
+                            <v:EmpireView Width="200"/>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
@@ -70,7 +71,12 @@
                         <Label Grid.Row="2" Grid.Column="0" Content="Language"/>
                         <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding LocalizationOptions}" SelectedValue="{Binding ActiveLocalizationKey}"/>
 
-                        <Button Grid.Row="3" Grid.Column="0" Content="Reload" Width="100" HorizontalAlignment="Left" Command="{Binding ReloadCommand}"/>
+                        <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal">
+                            <Button Content="Reload All" Width="80" Command="{Binding ReloadCommand}" 
+                                    ToolTip="Should be called once and is only needed again if the games updates or new mods are added / removed."/>
+                            <Button Content="Load Language" Width="100" Command="{Binding LoadLanguageCommand}"/>
+                        </StackPanel>
+
                     </Grid>
                 </StackPanel>
                 <Grid DockPanel.Dock="Bottom" Margin="5">
@@ -88,7 +94,7 @@
                             <Setter Property="ItemTemplate">
                                 <Setter.Value>
                                     <DataTemplate>
-                                        <vm:EmpirePropertyItemView/>
+                                        <v:EmpirePropertyItemView/>
                                     </DataTemplate>
                                 </Setter.Value>
                             </Setter>
@@ -108,8 +114,8 @@
                         <Label DockPanel.Dock="Top" Content="Origins"/>
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
                             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
-                                <Button Content="Allow All" Command="{Binding AllowAllCommand}" CommandParameter="Origin"/>
-                                <Button Content="Disallow All" Command="{Binding DisallowAllCommand}" CommandParameter="Origin"/>
+                                <Button Content="Allow All" Command="{Binding AllowAllCommand}" CommandParameter="{x:Static m:EmpirePropertyType.Origin}"/>
+                                <Button Content="Disallow All" Command="{Binding DisallowAllCommand}" CommandParameter="{x:Static m:EmpirePropertyType.Origin}"/>
                             </StackPanel>
                         </StackPanel>
                         <ListBox ItemsSource="{Binding Origins}">
@@ -119,8 +125,8 @@
                         <Label DockPanel.Dock="Top" Content="Civics"/>
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
                             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
-                                <Button Content="Allow All" Command="{Binding AllowAllCommand}" CommandParameter="Civic"/>
-                                <Button Content="Disallow All" Command="{Binding DisallowAllCommand}" CommandParameter="Civic"/>
+                                <Button Content="Allow All" Command="{Binding AllowAllCommand}" CommandParameter="{x:Static m:EmpirePropertyType.Civics}"/>
+                                <Button Content="Disallow All" Command="{Binding DisallowAllCommand}" CommandParameter="{x:Static m:EmpirePropertyType.Civics}"/>
                             </StackPanel>
                         </StackPanel>
                         <ListBox ItemsSource="{Binding Civics}">
@@ -130,8 +136,8 @@
                         <Label DockPanel.Dock="Top" Content="Ethics"/>
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
                             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
-                                <Button Content="Allow All" Command="{Binding AllowAllCommand}" CommandParameter="Ethic"/>
-                                <Button Content="Disallow All" Command="{Binding DisallowAllCommand}" CommandParameter="Ethic"/>
+                                <Button Content="Allow All" Command="{Binding AllowAllCommand}" CommandParameter="{x:Static m:EmpirePropertyType.Ethics}"/>
+                                <Button Content="Disallow All" Command="{Binding DisallowAllCommand}" CommandParameter="{x:Static m:EmpirePropertyType.Ethics}"/>
                             </StackPanel>
                         </StackPanel>
                         <ListBox ItemsSource="{Binding Ethics}">
@@ -141,8 +147,8 @@
                         <Label DockPanel.Dock="Top" Content="Authorities"/>
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
                             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
-                                <Button Content="Allow All" Command="{Binding AllowAllCommand}" CommandParameter="Authority"/>
-                                <Button Content="Disallow All" Command="{Binding DisallowAllCommand}" CommandParameter="Authority"/>
+                                <Button Content="Allow All" Command="{Binding AllowAllCommand}" CommandParameter="{x:Static m:EmpirePropertyType.Authority}"/>
+                                <Button Content="Disallow All" Command="{Binding DisallowAllCommand}" CommandParameter="{x:Static m:EmpirePropertyType.Authority}"/>
                             </StackPanel>
                         </StackPanel>
                         <ListBox ItemsSource="{Binding Authorities}">
@@ -152,8 +158,8 @@
                         <Label DockPanel.Dock="Top" Content="Traits"/>
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
                             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
-                                <Button Content="Allow All" Command="{Binding AllowAllCommand}" CommandParameter="Trait"/>
-                                <Button Content="Disallow All" Command="{Binding DisallowAllCommand}" CommandParameter="Trait"/>
+                                <Button Content="Allow All" Command="{Binding AllowAllCommand}" CommandParameter="{x:Static m:EmpirePropertyType.Trait}"/>
+                                <Button Content="Disallow All" Command="{Binding DisallowAllCommand}" CommandParameter="{x:Static m:EmpirePropertyType.Trait}"/>
                             </StackPanel>
                         </StackPanel>
                         <ListBox ItemsSource="{Binding Traits}">
@@ -163,8 +169,8 @@
                         <Label DockPanel.Dock="Top" Content="Species"/>
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
                             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
-                                <Button Content="Allow All" Command="{Binding AllowAllCommand}" CommandParameter="Species"/>
-                                <Button Content="Disallow All" Command="{Binding DisallowAllCommand}" CommandParameter="Species"/>
+                                <Button Content="Allow All" Command="{Binding AllowAllCommand}" CommandParameter="{x:Static m:EmpirePropertyType.Species}"/>
+                                <Button Content="Disallow All" Command="{Binding DisallowAllCommand}" CommandParameter="{x:Static m:EmpirePropertyType.Species}"/>
                             </StackPanel>
                         </StackPanel>
                         <ListBox ItemsSource="{Binding Species}">

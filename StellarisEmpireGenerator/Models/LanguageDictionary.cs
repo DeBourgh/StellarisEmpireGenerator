@@ -22,7 +22,7 @@ namespace StellarisEmpireGenerator.Models
 			Dictionary = new ReadOnlyDictionary<string, string>(_dictionary);
 		}
 
-		public IReadOnlyDictionary<string, string> Dictionary { get; set; }
+		public IReadOnlyDictionary<string, string> Dictionary { get; }
 
 		private static IDictionary<string, string> ExtractLanguageDictionary(IEnumerable<string> LanguageFiles, string LanguageKey)
 		{
@@ -147,6 +147,21 @@ namespace StellarisEmpireGenerator.Models
 			var dict = new LanguageDictionary(ExtractLanguageDictionary(PotentialFiles, LanguageKey));
 
 			return dict;
+		}
+
+		public IDictionary<string, string> ReduceDictionary(IEnumerable<string> TargetKeySet, bool AddEmptyKeys = false)
+		{
+			IDictionary<string, string> reduced = new Dictionary<string, string>();
+
+			foreach (var key in TargetKeySet)
+			{
+				string val = this[key];
+
+				if (val != null || AddEmptyKeys)
+					reduced.Add(key, val);
+			}
+
+			return reduced;
 		}
 	}
 }

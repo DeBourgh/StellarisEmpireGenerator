@@ -12,12 +12,16 @@ using StellarisEmpireGenerator.Core;
 using StellarisEmpireGenerator.Models;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using Newtonsoft.Json;
 
 namespace StellarisEmpireGenerator.ViewModels
 {
 	public class MainViewModel : ObservableObject, IDataErrorInfo
 	{
 		private const string _configFileName = "StellarisEmpireGenerator.config";
+		private const string _modelFileName = "StellarisEmpireGenerator.model";
+		private const string _langFileName = "StellarisEmpireGenerator.lang.{0}";
+
 		private readonly ConfigModel _config = null;
 
 		public MainViewModel()
@@ -28,7 +32,16 @@ namespace StellarisEmpireGenerator.ViewModels
 				_config = ConfigModel.ByDefault();
 
 			LoadFromConfig();
+
+			var props = PropertiesFromLocalFile();
+			ApplyProperties(props);
+
+			var dict = LanguageFromLocalFile();
+			ApplyLanguageDictionary(dict);
+
+			PropertyChanged += LanguageChanged;
 		}
+
 		private void LoadFromConfig()
 		{
 			InstallationDirectory = _config.InstallationDir;
@@ -46,104 +59,74 @@ namespace StellarisEmpireGenerator.ViewModels
 			_config.ActiveLocalizationKey = ActiveLocalizationKey;
 		}
 
-		public Dictionary<string, string> ErrorDict { get; } = new Dictionary<string, string>();
-
-		private string _stellarisInstallationFolder;
-		public bool StellarisInstallationFolderExists { get { return Directory.Exists(InstallationDirectory); } }
-		public string InstallationDirectory
+		private void PropertiesToLocalFile(IEnumerable<EmpireProperty> Properties)
 		{
-			get { return _stellarisInstallationFolder; }
-			set { SetProperty(ref _stellarisInstallationFolder, value.NormDirectory()); }
+			if (Properties == null || !Properties.Any())
+				return;
+
+			EmpireProperty.ToFile(Properties.ToList(), string.Format(_modelFileName));
 		}
 
-		private string _stellarisModFolder;
-		public bool StellarisModFolderExists { get { return Directory.Exists(ModDirectory); } }
-		public string ModDirectory
+		private IList<EmpireProperty> PropertiesFromLocalFile()
 		{
-			get { return _stellarisModFolder; }
-			set { SetProperty(ref _stellarisModFolder, value.NormDirectory()); }
-		}
-
-		//private ObservableCollection<string> _localizationOptions = new ObservableCollection<string>();
-		public ObservableCollection<string> LocalizationOptions { get; set; }
-
-		private string _activeLocalizationKey;
-		public string ActiveLocalizationKey
-		{
-			get { return _activeLocalizationKey; }
-			set { SetProperty(ref _activeLocalizationKey, value); }
-		}
-
-
-		private ICommand _reloadCommand;
-		public ICommand ReloadCommand
-		{
-			get
+			if (File.Exists(_modelFileName))
 			{
-				if (_reloadCommand == null)
+				try
 				{
-					_reloadCommand = new RelayCommand(
-						p => StellarisInstallationFolderExists,
-						p => Reload());
-				}
+					var properties = EmpireProperty.FromFile(_modelFileName);
 
-				return _reloadCommand;
+					if (properties != null)
+						return properties;
+				}
+				catch { }
+
+				// File seems to be corrupt, so delete it
+				File.Delete(_modelFileName);
+				return null;
 			}
+			else
+				return null;
 		}
 
-		private ICommand _allowAllCommand;
-		public ICommand AllowAllCommand
+		private void LanguageToLocalFile()
 		{
-			get
+			string content = JsonConvert.SerializeObject(LangDict);
+
+			File.WriteAllText(string.Format(_langFileName, LocalizationKeyLangDict), content, System.Text.Encoding.UTF8);
+
+		}
+		private IDictionary<string, string> LanguageFromLocalFile()
+		{
+			string langFile;
+			if (File.Exists(langFile = string.Format(_langFileName, ActiveLocalizationKey)))
 			{
-				if (_allowAllCommand == null)
+				string content = File.ReadAllText(langFile, System.Text.Encoding.UTF8);
+
+				try
 				{
-					_allowAllCommand = new RelayCommand(
-						p => true,
-						p => AllowAll(p));
+					Dictionary<string, string> langDict = JsonConvert.DeserializeObject<Dictionary<string, string>>(content);
+					return langDict;
 				}
-
-				return _allowAllCommand;
-			}
-		}
-
-		private ICommand _disallowAllCommand;
-		public ICommand DisallowAllCommand
-		{
-			get
-			{
-				if (_disallowAllCommand == null)
+				catch
 				{
-					_disallowAllCommand = new RelayCommand(
-						p => true,
-						p => DisallowAll(p));
+					// File seems to be corrupt, so delete it
+					File.Delete(langFile);
+					return null;
 				}
-
-				return _disallowAllCommand;
 			}
+			else
+				return null;
 		}
 
-		private ICommand _generateCommand;
-		public ICommand GenerateCommand
+		private IEnumerable<EmpirePropertyViewModel> CollectAllPropertyViewModels()
 		{
-			get
-			{
-				if (_generateCommand == null)
-				{
-					_generateCommand = new RelayCommand(P => true, p => GenerateEmpires((int)p));
-				}
-
-				return _generateCommand;
-			}
+			return Authorities.Concat(Civics).Concat(Ethics).Concat(Origins).Concat(Traits).Concat(Species);
 		}
-
-		private int _generateCount = 1;
-		public int GenerateCount
+		private IEnumerable<EmpirePropertyViewModel> GetWeightedProperties()
 		{
-			get => _generateCount;
-			set { SetProperty(ref _generateCount, value); }
+			var allowedProperties = CollectAllPropertyViewModels().Where(p => p.IsAllowed).OrderBy(p => $"{p.Source.Type}_{p.Source.Identifier}");
+			return allowedProperties.SelectMany(a => Enumerable.Repeat(a, a.Weight));
 		}
-
 		private IEnumerable<string> CollectMechanicFiles(string RootFolder)
 		{
 			return
@@ -202,6 +185,42 @@ namespace StellarisEmpireGenerator.ViewModels
 			return languageFiles;
 		}
 
+		#region Properties
+
+		private string _stellarisInstallationFolder;
+		public bool StellarisInstallationFolderExists { get { return Directory.Exists(InstallationDirectory); } }
+		public string InstallationDirectory
+		{
+			get { return _stellarisInstallationFolder; }
+			set { SetProperty(ref _stellarisInstallationFolder, value.NormDirectory()); }
+		}
+
+		private string _stellarisModFolder;
+		public bool StellarisModFolderExists { get { return Directory.Exists(ModDirectory); } }
+		public string ModDirectory
+		{
+			get { return _stellarisModFolder; }
+			set { SetProperty(ref _stellarisModFolder, value.NormDirectory()); }
+		}
+
+		public ObservableCollection<string> LocalizationOptions { get; set; }
+
+		private string _activeLocalizationKey;
+		public string ActiveLocalizationKey
+		{
+			get { return _activeLocalizationKey; }
+			set { SetProperty(ref _activeLocalizationKey, value); }
+		}
+
+		private string _localizationKeyLangDict = string.Empty;
+		public string LocalizationKeyLangDict
+		{
+			get => _localizationKeyLangDict;
+			set { SetProperty(ref _localizationKeyLangDict, value); }
+		}
+
+		private IDictionary<string, string> LangDict { get; set; }
+
 		public ObservableCollection<EmpirePropertyViewModel> Authorities { get; } = new ObservableCollection<EmpirePropertyViewModel>();
 		public ObservableCollection<EmpirePropertyViewModel> Civics { get; } = new ObservableCollection<EmpirePropertyViewModel>();
 		public ObservableCollection<EmpirePropertyViewModel> Ethics { get; } = new ObservableCollection<EmpirePropertyViewModel>();
@@ -209,76 +228,103 @@ namespace StellarisEmpireGenerator.ViewModels
 		public ObservableCollection<EmpirePropertyViewModel> Traits { get; } = new ObservableCollection<EmpirePropertyViewModel>();
 		public ObservableCollection<EmpirePropertyViewModel> Species { get; } = new ObservableCollection<EmpirePropertyViewModel>();
 
-
-
-		private IEnumerable<EmpirePropertyViewModel> CollectAllPropertyViewModels()
+		private ICommand _reloadCommand;
+		public ICommand ReloadCommand
 		{
-			return Authorities.Concat(Civics).Concat(Ethics).Concat(Origins).Concat(Traits).Concat(Species);
+			get
+			{
+				if (_reloadCommand == null)
+				{
+					_reloadCommand = new RelayCommand(
+						p => StellarisInstallationFolderExists,
+						p => Reload());
+				}
+
+				return _reloadCommand;
+			}
 		}
 
-		//private void Epvm_PropertyChanged(object sender, PropertyChangedEventArgs e)
-		//{
+		private ICommand _allowAllCommand;
+		public ICommand AllowAllCommand
+		{
+			get
+			{
+				if (_allowAllCommand == null)
+				{
+					_allowAllCommand = new RelayCommand(
+						p => true,
+						p => AllowAll(p));
+				}
 
-		//	throw new NotImplementedException();
-		//}
+				return _allowAllCommand;
+			}
+		}
 
+		private ICommand _disallowAllCommand;
+		public ICommand DisallowAllCommand
+		{
+			get
+			{
+				if (_disallowAllCommand == null)
+				{
+					_disallowAllCommand = new RelayCommand(
+						p => true,
+						p => DisallowAll(p));
+				}
 
+				return _disallowAllCommand;
+			}
+		}
+
+		private ICommand _generateCommand;
+		public ICommand GenerateCommand
+		{
+			get
+			{
+				if (_generateCommand == null)
+				{
+					_generateCommand = new RelayCommand(p => true, p => GenerateEmpires((int)p));
+				}
+
+				return _generateCommand;
+			}
+		}
+
+		private ICommand _loadLanguageCommand;
+		public ICommand LoadLanguageCommand
+		{
+			get
+			{
+				if (_loadLanguageCommand == null)
+				{
+					_loadLanguageCommand = new RelayCommand(p => true, p => LoadLanguage());
+				}
+
+				return _loadLanguageCommand;
+			}
+		}
+
+		private int _generateCount = 1;
+		public int GenerateCount
+		{
+			get => _generateCount;
+			set { SetProperty(ref _generateCount, value); }
+		}
+
+		#endregion
 
 		#region Command Methods
 
 		private void Reload()
 		{
+			LocalizationKeyLangDict = ActiveLocalizationKey;
 			try
 			{
-				var mechPaths = CollectFilePathsGameMechanics();
+				var props = PropertiesFromGameFiles();
 
-				var root = Entity.FromFiles(mechPaths);
-
-				var rootContent = root.Serialize();
-				File.WriteAllText("allText.txt", rootContent);
-
-				var props = EmpireProperty.FromEntityRoot(root);
-
-				//EmpireProperty.SaveToFile(props, "props.txt");
-
-				var langPaths = CollectLanguageFilePaths();
-				var lang = LanguageDictionary.FromConfigModel(langPaths, ActiveLocalizationKey);
-				EmpireProperty.ApplyLanguage(props, lang);
-
-				Authorities.Clear();
-				Origins.Clear();
-				Civics.Clear();
-				Ethics.Clear();
-				Traits.Clear();
-				Species.Clear();
-				foreach (var prop in props.OrderBy(p => p.Name))
-				{
-					var epvm = new EmpirePropertyViewModel(prop);
-
-					switch (prop.Type)
-					{
-						case EmpirePropertyType.Origin:
-							Origins.Add(epvm);
-							break;
-						case EmpirePropertyType.Civics:
-							Civics.Add(epvm);
-							break;
-						case EmpirePropertyType.Authority:
-							Authorities.Add(epvm);
-							break;
-						case EmpirePropertyType.Trait:
-							Traits.Add(epvm);
-							break;
-						case EmpirePropertyType.Species:
-							Species.Add(epvm);
-							break;
-						case EmpirePropertyType.Ethics:
-							Ethics.Add(epvm);
-							break;
-					}
-
-					//epvm.PropertyChanged += Epvm_PropertyChanged;
-				}
+				PropertiesToLocalFile(props);
+				ApplyProperties(props);
+				LoadLanguage();
 			}
 			catch (Exception e)
 			{
@@ -286,9 +332,103 @@ namespace StellarisEmpireGenerator.ViewModels
 			}
 		}
 
+		private void LoadLanguage()
+		{
+			var dict = LanguageDictionaryFromGameFiles();
+			ApplyLanguageDictionary(dict);
+			LanguageToLocalFile();
+		}
+
+		private IEnumerable<EmpireProperty> PropertiesFromGameFiles(bool SerializeLocallyOnLoad = true)
+		{
+			var mechPaths = CollectFilePathsGameMechanics();
+			Entity root = Entity.FromFiles(mechPaths);
+
+			var props = EmpireProperty.FromEntityRoot(root);
+
+			if (SerializeLocallyOnLoad)
+				PropertiesToLocalFile(props);
+
+			return props;
+		}
+
+		private void ApplyProperties(IEnumerable<EmpireProperty> Properties)
+		{
+			if (Properties == null)
+				return;
+
+			Authorities.Clear();
+			Origins.Clear();
+			Civics.Clear();
+			Ethics.Clear();
+			Traits.Clear();
+			Species.Clear();
+
+			foreach (var prop in Properties)
+			{
+				var epvm = new EmpirePropertyViewModel(prop);
+
+				switch (prop.Type)
+				{
+					case EmpirePropertyType.Origin:
+						Origins.Add(epvm);
+						break;
+					case EmpirePropertyType.Civics:
+						Civics.Add(epvm);
+						break;
+					case EmpirePropertyType.Authority:
+						Authorities.Add(epvm);
+						break;
+					case EmpirePropertyType.Trait:
+						Traits.Add(epvm);
+						break;
+					case EmpirePropertyType.Species:
+						Species.Add(epvm);
+						break;
+					case EmpirePropertyType.Ethics:
+						Ethics.Add(epvm);
+						break;
+				}
+			}
+		}
+
+
+		private void ApplyLanguageDictionary(IDictionary<string, string> Dict)
+		{
+			if (Dict == null)
+			{
+				foreach (var propVm in CollectAllPropertyViewModels())
+					propVm.Name = propVm.Source.Identifier;
+
+				return;
+			}
+
+			LangDict = Dict;
+			LocalizationKeyLangDict = ActiveLocalizationKey;
+
+			foreach (var propVm in CollectAllPropertyViewModels())
+				propVm.Name = LangDict[propVm.Source.Identifier] ?? propVm.Source.Identifier;
+
+		}
+		private IDictionary<string, string> LanguageDictionaryFromGameFiles(bool SerializeLocallyOnLoad = true)
+		{
+			if (!CollectAllPropertyViewModels().Any())
+				return null;
+
+			var langPaths = CollectLanguageFilePaths();
+			var langDict = LanguageDictionary.FromConfigModel(langPaths, ActiveLocalizationKey);
+
+			var langDictReduced = langDict.ReduceDictionary(CollectAllPropertyViewModels().Select(p => p.Source.Identifier));
+
+			if (SerializeLocallyOnLoad)
+				LanguageToLocalFile();
+
+			return langDictReduced;
+		}
+
 		private void ChangeAllowAll(object Parameter, bool Value)
 		{
-			var e = Enum.Parse(typeof(EmpirePropertyType), (string)Parameter);
+			var e = (EmpirePropertyType)Parameter;
 
 			IEnumerable<EmpirePropertyViewModel> epvm = Enumerable.Empty<EmpirePropertyViewModel>();
 
@@ -314,7 +454,8 @@ namespace StellarisEmpireGenerator.ViewModels
 					break;
 			}
 
-			epvm.ToList().ForEach(p => p.IsAllowed = Value);
+			foreach (var p in epvm)
+				p.IsAllowed = Value;
 		}
 		private void AllowAll(object Parameter)
 		{
@@ -324,48 +465,6 @@ namespace StellarisEmpireGenerator.ViewModels
 		{
 			ChangeAllowAll(Parameter, false);
 		}
-
-		//private void GenerateAuthority()
-		//{
-
-		//}
-		//private void GenerateCivics()
-		//{
-
-		//}
-		//private void GenerateEthic()
-		//{
-
-		//}
-		//private void GenerateOrigin()
-		//{
-
-		//}
-		//private void GenerateTraitsAndSpecies()
-		//{
-
-		//}
-
-		private bool Validator(EmpireProperty Property, EmpirePropertyViewModel EpVm)
-		{
-			return Property.Identifier == EpVm.Source.Identifier;
-		}
-
-
-
-		private IEnumerable<EmpirePropertyViewModel> GetWeightedProperties()
-		{
-			var allowedProperties = CollectAllPropertyViewModels().Where(p => p.IsAllowed).OrderBy(p => $"{p.Source.Type}_{p.Source.Identifier}");
-			return allowedProperties.SelectMany(a => Enumerable.Repeat(a, a.Weight));
-		}
-
-
-		//private IEnumerable<EmpirePropertyViewModel> GenerateEmpire()
-		//{
-
-
-		//	return null;
-		//}
 
 		private void GenerateEmpires(int Count)
 		{
@@ -394,11 +493,18 @@ namespace StellarisEmpireGenerator.ViewModels
 
 		#endregion
 
-		public void SaveConfigToFile()
+		public void Save()
 		{
 			SaveIntoConfig();
 			ConfigModel.SaveToFile(_config, _configFileName);
+
+			PropertiesToLocalFile(CollectAllPropertyViewModels().Select(p => p.Source));
+			LanguageToLocalFile();
 		}
+
+		#region IDataErrorInfoImplementation
+
+		public Dictionary<string, string> ErrorDict { get; } = new Dictionary<string, string>();
 
 		public string this[string PropertyName]
 		{
@@ -427,6 +533,23 @@ namespace StellarisEmpireGenerator.ViewModels
 			}
 		}
 		public string Error { get { return null; } }
+
+		#endregion
+
+		#region Events
+
+		private void LanguageChanged(object sender, PropertyChangedEventArgs e)
+		{
+			if (e.PropertyName == nameof(ActiveLocalizationKey))
+			{
+				var langDict = LanguageFromLocalFile();
+
+				if (langDict != null)
+					ApplyLanguageDictionary(langDict);
+			}
+		}
+
+		#endregion
 
 		public class GeneratorNode
 		{
@@ -462,7 +585,6 @@ namespace StellarisEmpireGenerator.ViewModels
 			public GeneratorNode Parent { get; private set; }
 
 			public bool IsSolution { get => HasAuthority && HasCivics && HasEthics && HasOrigin && HasSpecies && HasTraits; }
-			//public bool IsSolution { get; private set; } = false;
 
 			private bool HasAuthority { get; set; }
 
