@@ -122,9 +122,9 @@ namespace StellarisEmpireGenerator.ViewModels
 		{
 			return Authorities.Concat(Civics).Concat(Ethics).Concat(Origins).Concat(Traits).Concat(Species);
 		}
-		private IEnumerable<EmpirePropertyViewModel> GetWeightedProperties()
+		private IEnumerable<EmpirePropertyViewModel> GetWeightedPropertyViewModels()
 		{
-			var allowedProperties = CollectAllPropertyViewModels().Where(p => p.IsAllowed).OrderBy(p => $"{p.Source.Type}_{p.Source.Identifier}");
+			var allowedProperties = CollectAllPropertyViewModels().Where(p => p.IsAllowed);
 			return allowedProperties.SelectMany(a => Enumerable.Repeat(a, a.Weight));
 		}
 		private IEnumerable<string> CollectMechanicFiles(string RootFolder)
@@ -468,7 +468,7 @@ namespace StellarisEmpireGenerator.ViewModels
 
 		private void GenerateEmpires(int Count)
 		{
-			var props = GetWeightedProperties().ToList();
+			var props = GetWeightedPropertyViewModels().ToList();
 
 			try
 			{
@@ -485,9 +485,9 @@ namespace StellarisEmpireGenerator.ViewModels
 					}
 				}
 			}
-			catch
+			catch (Exception e)
 			{
-
+				;
 			}
 		}
 
@@ -555,11 +555,11 @@ namespace StellarisEmpireGenerator.ViewModels
 		{
 			private static readonly Random Rnd = new Random(Environment.TickCount);
 
-			private GeneratorNode(IEnumerable<EmpirePropertyViewModel> Source, bool Shuffle)
+			private GeneratorNode(IEnumerable<EmpirePropertyViewModel> WeightedSource)
 			{
 				Solution = new List<EmpirePropertyViewModel>();
-				Properties = new List<EmpirePropertyViewModel>(Source);
-				RemainingIndexes = Enumerable.Range(0, Source.Count()).ToList();
+				Properties = WeightedSource.OrderBy(p => $"{p.Source.Type}_{p.Source.Identifier}").ToList();
+				RemainingIndexes = Enumerable.Range(0, WeightedSource.Count()).ToList();
 			}
 
 			private GeneratorNode(GeneratorNode Parent, EmpirePropertyViewModel PickedProperty)
@@ -606,6 +606,14 @@ namespace StellarisEmpireGenerator.ViewModels
 
 			public List<EmpirePropertyViewModel> Properties { get; private set; }
 
+			public List<EmpirePropertyViewModel> RemainingProperties
+			{
+				get
+				{
+					return RemainingIndexes.Select(i => Properties[i]).ToList();
+				}
+			}
+
 			//public Dictionary<int, EmpirePropertyViewModel> g;
 
 			public List<int> RemainingIndexes { get; }
@@ -619,53 +627,55 @@ namespace StellarisEmpireGenerator.ViewModels
 			private bool HasPotentMatches(EmpirePropertyViewModel ToMatch)
 			{
 				var toMatch = ToMatch.Source;
-				var types = toMatch.Constraints.SubConstraints.Select(c => c.Group).Where(t => t != EmpirePropertyType.Unknown);
-				IDictionary<EmpirePropertyType, int> firsts = types
-					.Select(t => RemainingIndexes.First(i => Properties[i].Source.Type == t))
-					.ToDictionary(i => Properties[RemainingIndexes[i]].Source.Type);
+				var types = toMatch.Constraints.SubConstraints.Select(c => c.Group).Where(t => t != EmpirePropertyType.Unknown).ToList();
+				int typesCount = types.Count;
+				int remainingCount = RemainingIndexes.Count;
 
-				foreach (var keyVal in firsts)
+				bool typeMatchFound = false;
+				bool eachTypeMatchFound = true;
+
+				var currentTypeIndex = 0;				
+				bool isComparing = false;
+				int i = 0;
+				while ((currentTypeIndex < typesCount) && (i < remainingCount))
 				{
-					bool typeMatchFound = true;
-					for (int i = keyVal.Value; i < RemainingIndexes.Count; i++)
+					var prop = Properties[RemainingIndexes[i]];
+					var type = types[currentTypeIndex];
+
+					int cmp;
+
+					if ((cmp = prop.Source.Type.CompareTo(type)) == 0)
 					{
-						var index = RemainingIndexes[i];
-						var prop = Properties[index];
+						i++;
+
+						if (typeMatchFound)
+							continue;
+
+						isComparing = true;
 
 						bool e = Matches(ToMatch, prop);
-						typeMatchFound &= e;
-
-						if (!typeMatchFound)
-							break;
-
-						if (prop.Source.Type != keyVal.Key)
-							break;
+						typeMatchFound |= e;
 					}
+					else
+					{
+						if (cmp < 0)
+							i++;
+						else
+							currentTypeIndex++;
 
-					if (!typeMatchFound)
-						return false;
+						if (isComparing)
+						{
+							eachTypeMatchFound &= typeMatchFound;
+							typeMatchFound = false;
+							
+							isComparing = false;
+
+							continue;
+						}
+					}
 				}
 
-				return false;
-
-				//var matchingIndex = RemainingIndexes[Index];
-				//var matching = Properties[matchingIndex].Source;
-				//var matchingType = matching.Type;
-
-				//for (int i = Index; i < RemainingIndexes.Count; i++)
-				//{
-				//	var index = RemainingIndexes[i];
-				//	var prop = Properties[index].Source;
-
-				//	if (prop.Type != toMatch.Type)
-				//		break;
-				//	else
-				//	{
-
-				//	}
-				//}
-
-				//return false;
+				return eachTypeMatchFound;
 			}
 
 			private bool Matches(EmpirePropertyViewModel ToMatch, EmpirePropertyViewModel Matching)
@@ -935,7 +945,7 @@ namespace StellarisEmpireGenerator.ViewModels
 
 			public static GeneratorNode CreateRoot(IEnumerable<EmpirePropertyViewModel> Source)
 			{
-				GeneratorNode node = new GeneratorNode(Source, true);
+				GeneratorNode node = new GeneratorNode(Source);
 				return node;
 			}
 		}

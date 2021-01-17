@@ -105,6 +105,9 @@ namespace StellarisEmpireGenerator.Models
 						Constraints.SubConstraints.Add(subCon);
 				}
 			}
+
+			Constraints.Objects.Sort((c1, c2) => c1.Type.CompareTo(c2.Type));
+			Constraints.SubConstraints.Sort((c1, c2) => c1.Group.CompareTo(c2.Group));
 		}
 
 		private static bool IsLogicGate(Entity Node)
@@ -675,10 +678,10 @@ namespace StellarisEmpireGenerator.Models
 		public Condition LogicGate { get; set; }
 
 		[JsonProperty(ReferenceLoopHandling = ReferenceLoopHandling.Ignore, IsReference = true)]
-		public ICollection<T> Objects { get; } = new LinkedList<T>();
+		public List<T> Objects { get; } = new List<T>();
 
 		[JsonProperty(ReferenceLoopHandling = ReferenceLoopHandling.Ignore, IsReference = true)]
-		public ICollection<Constraint<T>> SubConstraints { get; } = new LinkedList<Constraint<T>>();
+		public List<Constraint<T>> SubConstraints { get; } = new List<Constraint<T>>();
 
 		public EmpirePropertyType Group { get; set; } = EmpirePropertyType.Unknown;
 
