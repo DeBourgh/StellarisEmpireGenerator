@@ -606,13 +606,9 @@ namespace StellarisEmpireGenerator.ViewModels
 
 			public List<EmpirePropertyViewModel> Properties { get; private set; }
 
-			public List<EmpirePropertyViewModel> RemainingProperties
-			{
-				get
-				{
-					return RemainingIndexes.Select(i => Properties[i]).ToList();
-				}
-			}
+			private EmpirePropertyViewModel CurrentPick { get; set; }
+
+			public List<EmpirePropertyViewModel> RemainingProperties { get { return RemainingIndexes.Select(i => Properties[i]).ToList(); } }
 
 			//public Dictionary<int, EmpirePropertyViewModel> g;
 
@@ -634,7 +630,7 @@ namespace StellarisEmpireGenerator.ViewModels
 				bool typeMatchFound = false;
 				bool eachTypeMatchFound = true;
 
-				var currentTypeIndex = 0;				
+				var currentTypeIndex = 0;
 				bool isComparing = false;
 				int i = 0;
 				while ((currentTypeIndex < typesCount) && (i < remainingCount))
@@ -667,7 +663,7 @@ namespace StellarisEmpireGenerator.ViewModels
 						{
 							eachTypeMatchFound &= typeMatchFound;
 							typeMatchFound = false;
-							
+
 							isComparing = false;
 
 							continue;
@@ -709,7 +705,7 @@ namespace StellarisEmpireGenerator.ViewModels
 
 				return false;
 			}
-			private bool AreCompatible(EmpirePropertyViewModel Property1, EmpirePropertyViewModel Property2)
+			private bool CheckProperties(EmpirePropertyViewModel Property1, EmpirePropertyViewModel Property2)
 			{
 				var prop1 = Property1.Source;
 				var prop2 = Property2.Source;
@@ -740,6 +736,38 @@ namespace StellarisEmpireGenerator.ViewModels
 
 				return true;
 			}
+			private bool CheckProperty(EmpirePropertyViewModel Property)
+			{
+				var prop = Property.Source;
+
+				foreach (var sol in Solution)
+				{
+					if (!CheckProperties(Property, sol))
+						return false;
+				}
+
+				switch (prop.Type)
+				{
+					case EmpirePropertyType.Authority:
+						break;
+					case EmpirePropertyType.Civics:
+						//if (CivicPointsAvailable == 0)
+						//	return false;
+						break;
+					case EmpirePropertyType.Ethics:
+						if (Property.Source.AsEthic.EthicCost > EthicPointsAvailable)
+							return false;
+						break;
+					case EmpirePropertyType.Origin:
+						break;
+					case EmpirePropertyType.Species:
+						break;
+					case EmpirePropertyType.Trait:
+						break;
+				}
+
+				return true;
+			}
 
 			private void PickProperty(EmpirePropertyViewModel Property)
 			{
@@ -748,7 +776,7 @@ namespace StellarisEmpireGenerator.ViewModels
 					var index = RemainingIndexes[i];
 					var prop = Properties[index];
 
-					if (!AreCompatible(Property, prop))
+					if (!CheckProperties(Property, prop))
 						RemoveProperty(i, prop.Weight);
 					else
 						i++;
@@ -757,23 +785,39 @@ namespace StellarisEmpireGenerator.ViewModels
 				switch (Property.Source.Type)
 				{
 					case EmpirePropertyType.Authority:
-						HasAuthority = true;
-						RemoveAuthorities();
+						PickAuthority();
 						break;
 					case EmpirePropertyType.Civics:
-						CivicPointsAvailable--;
-						RemoveCivics();
+						PickCivic();
+						break;
+					case EmpirePropertyType.Ethics:
+						PickEthic();
 						break;
 					case EmpirePropertyType.Origin:
 						HasOrigin = true;
 						RemoveOrigins();
 						break;
+					case EmpirePropertyType.Species:
+						break;
+					case EmpirePropertyType.Trait:
+						break;
 				}
-				//for (int i = toRemove.Count - 1; i >= 0; i--)
-				//	RemoveProperty(toRemove[i]);
-				//RemainingIndexes.RemoveAt(toRemove[i]);
+			}
 
-
+			private void PickAuthority()
+			{
+				HasAuthority = true;
+				RemoveAuthorities();
+			}
+			private void PickCivic()
+			{
+				CivicPointsAvailable--;
+				RemoveCivics();
+			}
+			private void PickEthic()
+			{
+				EthicPointsAvailable -= CurrentPick.Source.AsEthic.EthicCost;
+				RemoveEthics();
 			}
 
 			private void RemoveType(EmpirePropertyType Type)
@@ -801,38 +845,62 @@ namespace StellarisEmpireGenerator.ViewModels
 					// Remove civics that are now impossible because of the first civic selection
 					var first = RemainingIndexes.First(i => Properties[i].Source.Type == EmpirePropertyType.Civics);
 
-					var toRemove = new List<EmpirePropertyViewModel>();
+					//var toRemove = new List<EmpirePropertyViewModel>();
 
 					for (int i = first; i < RemainingIndexes.Count;)
 					{
 						var index = RemainingIndexes[i];
-						var civic = Properties[index];
+						var civicVm = Properties[index];
 
-						if (civic.Source.Type == EmpirePropertyType.Civics)
+						if (civicVm.Source.Type == EmpirePropertyType.Civics)
 						{
-							var b = HasPotentMatches(civic);
+							var b = HasPotentMatches(civicVm);
 
 							if (!b)
-							{
-								toRemove.Add(civic);
-								RemoveProperty(i, civic.Weight);
-							}
+								RemoveProperty(i, civicVm.Weight);
 							else
 								i++;
-
-							//if (!b)
-							//	toRemove.Add(civic);
-							//if (!b)
-							//	RemoveProperty(i, civic.Source.Weight);
 						}
 						else
 							break;
 					}
-					;
 				}
 				else if (CivicPointsAvailable == 0)
 					RemoveType(EmpirePropertyType.Civics);
 			}
+
+			private void RemoveEthics()
+			{
+				if (EthicPointsAvailable == 0)
+					RemoveType(EmpirePropertyType.Ethics);
+
+				//// Remove civics that are now impossible because of the first civic selection
+				//var first = RemainingIndexes.First(i => Properties[i].Source.Type == EmpirePropertyType.Ethics);
+
+				////var toRemove = new List<EmpirePropertyViewModel>();
+
+				//for (int i = first; i < RemainingIndexes.Count;)
+				//{
+				//	var index = RemainingIndexes[i];
+				//	var ethicVm = Properties[index];
+				//	var ethic = ethicVm.Source.AsEthic;
+
+				//	if (ethic != null)
+				//	{
+				//		//if (ethic.EthicCost > EthicPointsAvailable)
+
+				//		//var b = HasPotentMatches(ethic);
+
+				//		//if (!b)
+				//		//	RemoveProperty(i, ethic.Weight);
+				//		//else
+				//		//	i++;
+				//	}
+				//	else
+				//		break;
+				//}
+			}
+
 			private void RemoveOrigins()
 			{
 				RemoveType(EmpirePropertyType.Origin);
@@ -877,15 +945,6 @@ namespace StellarisEmpireGenerator.ViewModels
 #endif
 				RemainingIndexes.RemoveRange(Index, Weight);
 			}
-			//private void RemoveProperty(int Index, EmpirePropertyViewModel Property)
-			//{
-			//	RemoveProperty(Index, Property.Weight);
-			//}
-
-			//private void RemoveProperty(EmpirePropertyViewModel Property)
-			//{
-
-			//}
 
 			public GeneratorNode Iterate()
 			{
@@ -896,38 +955,31 @@ namespace StellarisEmpireGenerator.ViewModels
 				// Pick randomly an property
 				int pickedIndex = Rnd.Next(RemainingIndexes.Count);
 				int pickedRemainingIndex = RemainingIndexes[pickedIndex];
-				var pickedProp = Properties[pickedRemainingIndex];
+				CurrentPick = Properties[pickedRemainingIndex];
 
 				//RemainingIndexes.RemoveAt(pickedIndex);
-				pickedIndex = Properties.FindIndex(p => p.Source.Identifier == "civic_meritocracy");
-				pickedProp = Properties.First(p => p.Source.Identifier == "civic_meritocracy");
+				pickedIndex = Properties.FindIndex(p => p.Source.Identifier == "ethic_fanatic_authoritarian");
+				CurrentPick = Properties.First(p => p.Source.Identifier == "ethic_fanatic_authoritarian");
 
-				RemoveProperty(pickedIndex, pickedProp.Weight);
-
-
+				RemoveProperty(pickedIndex, CurrentPick.Weight);
 
 				// Check if this item fits in the current selection
-				foreach (var cs in Solution)
-				{
-					if (!AreCompatible(pickedProp, cs))
-						return this;
-				}
+				if (!CheckProperty(CurrentPick))
+					return this;
+
+
+
 
 				// Remove all same-items (if the picked property had a weight > 1)
 				//int weight;
 				//if ((weight = pickedProp.Weight) > 1)
 				//	RemainingIndexes.RemoveRange(pickedIndex + 1, weight - 1);
 
-				PickProperty(pickedProp);
+				PickProperty(CurrentPick);
 
-				return new GeneratorNode(this, pickedProp);
+				return new GeneratorNode(this, CurrentPick);
 
 				// Check if already picked items and newly picked one are compatible to each other
-
-
-				//pickedProp = RemainingProperties.First(p => p.Source.Identifier == "civic_meritocracy");
-
-
 
 				//var imp = ImpossibleProperties(pickedProp);
 				//switch

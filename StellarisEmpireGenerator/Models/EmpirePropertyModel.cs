@@ -18,6 +18,8 @@ namespace StellarisEmpireGenerator.Models
 	[JsonObject(IsReference = true)]
 	public class EmpireProperty
 	{
+		public static readonly int MaximumEthicPoints = 3;
+
 		protected static readonly string[] LogicGatesAsString = Enum.GetNames(typeof(Condition)).Select(e => e.ToLower()).ToArray();
 		protected static readonly string[] EmpirePropertyTypesAsString = Enum.GetNames(typeof(EmpirePropertyType)).Select(e => e.ToLower()).ToArray();
 
@@ -41,7 +43,7 @@ namespace StellarisEmpireGenerator.Models
 
 		public EmpirePropertyType Type { get; set; } = EmpirePropertyType.Unknown;
 
-		public Constraint<EmpireProperty> Constraints { get; set; }
+		public Constraint<EmpireProperty> Constraints { get; set; } = Constraint<EmpireProperty>.True;
 
 		[JsonIgnore]
 		protected Constraint<EmpireProperty> Possible { get; private set; } = Constraint<EmpireProperty>.True;
@@ -73,8 +75,6 @@ namespace StellarisEmpireGenerator.Models
 
 		private void MergeConstraints()
 		{
-			Constraints = new Constraint<EmpireProperty>(Condition.Each);
-
 			foreach (var objs in Potential.Objects.Concat(Possible.Objects))
 				Constraints.Objects.Add(objs);
 
@@ -265,17 +265,6 @@ namespace StellarisEmpireGenerator.Models
 
 		#endregion
 
-		//public static void ApplyLanguage(IEnumerable<EmpireProperty> Properties, LanguageDictionary Dict)
-		//{
-		//	foreach (var prop in Properties)
-		//	{
-		//		prop.Name = Dict[prop.Identifier];
-
-		//		if (string.IsNullOrWhiteSpace(prop.Name))
-		//			prop.Name = prop.Identifier;
-		//	}
-		//}
-
 		private static IEnumerable<string> ExtractDlc(Entity Node)
 		{
 			return Node.Children.FirstOrDefaultKey("playable")?.Descendants.WhereKey("host_has_dlc").Select(e => e.Key) ?? Enumerable.Empty<string>();
@@ -285,8 +274,37 @@ namespace StellarisEmpireGenerator.Models
 
 		protected virtual void UpdateRelationsToOtherEmpireProperties(IEnumerable<EmpireProperty> Properties) { }
 
+		protected void AddConstraint(Condition LogicGate, EmpireProperty Property)
+		{
+			var type = Property.Type;
+			Constraint<EmpireProperty> typeSubConstraint;
 
+			if ((typeSubConstraint = Constraints.SubConstraints.FirstOrDefault(c => c.Group == type)) == null)
+			{
+				typeSubConstraint = new Constraint<EmpireProperty>(Condition.Each)
+				{
+					Group = type
+				};
 
+				Constraints.SubConstraints.Add(typeSubConstraint);
+			}
+
+			if (LogicGate == Condition.Each)
+				typeSubConstraint.Objects.Add(Property);
+			else
+			{
+				Constraint<EmpireProperty> logicGateSubConstraint;
+
+				if ((logicGateSubConstraint = typeSubConstraint.SubConstraints.FirstOrDefault(c => c.LogicGate == LogicGate)) == null)
+				{
+					logicGateSubConstraint = new Constraint<EmpireProperty>(LogicGate);
+					typeSubConstraint.SubConstraints.Add(logicGateSubConstraint);
+				}
+
+				logicGateSubConstraint.Objects.Add(Property);
+
+			}
+		}
 
 		#region Object Overrides
 
@@ -310,6 +328,480 @@ namespace StellarisEmpireGenerator.Models
 
 		#endregion
 
+		#region Generating Solutions
+
+		public static IEnumerable<EmpireProperty> GenerateSolution(IEnumerable<EmpireProperty> Properties)
+		{
+			if (Properties is null)
+				throw new ArgumentNullException(nameof(Properties));
+
+			throw new NotImplementedException();
+		}
+		public static IEnumerable<IEnumerable<EmpireProperty>> GenerateSolution(IEnumerable<EmpireProperty> Properties, int Amount)
+		{
+			if (Amount < 1)
+				throw new ArgumentException(nameof(Amount));
+
+			List<IEnumerable<EmpireProperty>> solutions = new List<IEnumerable<EmpireProperty>>(Amount);
+
+			for (int i = 0; i < Amount; i++)
+				solutions.Add(GenerateSolution(Properties));
+
+			return solutions;
+		}
+
+		//		public class GeneratorNode
+		//		{
+		//			private static readonly Random Rnd = new Random(Environment.TickCount);
+
+		//			private GeneratorNode(IEnumerable<EmpireProperty> WeightedSource)
+		//			{
+		//				Solution = new List<EmpireProperty>();
+		//				Properties = WeightedSource.OrderBy(p => $"{p.Type}_{p.Identifier}").ToList();
+		//				RemainingIndexes = Enumerable.Range(0, WeightedSource.Count()).ToList();
+		//			}
+
+		//			private GeneratorNode(GeneratorNode Parent, EmpireProperty PickedProperty)
+		//			{
+		//				this.Parent = Parent;
+
+		//				Solution = new List<EmpireProperty>(Parent.Solution)
+		//				{
+		//					PickedProperty
+		//				};
+
+		//				Properties = Parent.Properties;
+		//				RemainingIndexes = new List<int>(Parent.RemainingIndexes);
+
+		//				HasAuthority = Parent.HasAuthority;
+		//				CivicPointsAvailable = Parent.CivicPointsAvailable;
+		//				EthicPointsAvailable = Parent.EthicPointsAvailable;
+		//				HasOrigin = Parent.HasOrigin;
+		//				HasSpecies = Parent.HasSpecies;
+		//				TraitPointsAvailable = Parent.TraitPointsAvailable;
+		//			}
+
+		//			public GeneratorNode Parent { get; private set; }
+
+		//			public bool IsSolution { get => HasAuthority && HasCivics && HasEthics && HasOrigin && HasSpecies && HasTraits; }
+
+		//			private bool HasAuthority { get; set; }
+
+		//			private int CivicPointsAvailable { get; set; } = 2;
+		//			private bool HasCivics { get => CivicPointsAvailable == 0; }
+
+		//			private int EthicPointsAvailable { get; set; } = 3;
+		//			private bool HasEthics { get => EthicPointsAvailable == 0; }
+		//			private bool HasOrigin { get; set; }
+		//			private bool HasSpecies { get; set; }
+
+		//			private int TraitPointsAvailable { get; set; } = -1;
+		//			private bool HasTraits { get => TraitPointsAvailable == 0; }
+
+		//			//private int CivicsCount { get; private set; }
+		//			//public ObservableCollection<EmpireViewModel> Empires { get; } = new ObservableCollection<EmpireViewModel>();
+
+		//			public ICollection<EmpireProperty> Solution { get; }
+
+		//			public List<EmpireProperty> Properties { get; private set; }
+
+		//			private EmpireProperty CurrentPick { get; set; }
+
+		//			public List<EmpireProperty> RemainingProperties { get { return RemainingIndexes.Select(i => Properties[i]).ToList(); } }
+
+		//			//public Dictionary<int, EmpirePropertyViewModel> g;
+
+		//			public List<int> RemainingIndexes { get; }
+
+		//			//public IList<int> AttemptedPicks { get; }
+
+		//			//private bool HasPotentMatches()
+		//			//{
+		//			//	return false;
+		//			//}
+		//			private bool HasPotentMatches(EmpireProperty ToMatch)
+		//			{
+		//				var toMatch = ToMatch.Source;
+		//				var types = toMatch.Constraints.SubConstraints.Select(c => c.Group).Where(t => t != EmpirePropertyType.Unknown).ToList();
+		//				int typesCount = types.Count;
+		//				int remainingCount = RemainingIndexes.Count;
+
+		//				bool typeMatchFound = false;
+		//				bool eachTypeMatchFound = true;
+
+		//				var currentTypeIndex = 0;
+		//				bool isComparing = false;
+		//				int i = 0;
+		//				while ((currentTypeIndex < typesCount) && (i < remainingCount))
+		//				{
+		//					var prop = Properties[RemainingIndexes[i]];
+		//					var type = types[currentTypeIndex];
+
+		//					int cmp;
+
+		//					if ((cmp = prop.Source.Type.CompareTo(type)) == 0)
+		//					{
+		//						i++;
+
+		//						if (typeMatchFound)
+		//							continue;
+
+		//						isComparing = true;
+
+		//						bool e = Matches(ToMatch, prop);
+		//						typeMatchFound |= e;
+		//					}
+		//					else
+		//					{
+		//						if (cmp < 0)
+		//							i++;
+		//						else
+		//							currentTypeIndex++;
+
+		//						if (isComparing)
+		//						{
+		//							eachTypeMatchFound &= typeMatchFound;
+		//							typeMatchFound = false;
+
+		//							isComparing = false;
+
+		//							continue;
+		//						}
+		//					}
+		//				}
+
+		//				return eachTypeMatchFound;
+		//			}
+
+		//			private bool Matches(EmpirePropertyViewModel ToMatch, EmpirePropertyViewModel Matching)
+		//			{
+		//				var toMatch = ToMatch.Source;
+		//				var matching = Matching.Source;
+
+		//				foreach (var cons in toMatch.Constraints.SubConstraints)
+		//				{
+		//					if (matching.Type != cons.Group)
+		//						continue;
+		//					else
+		//					{
+		//						bool e = cons.Evaluate(matching, (p1, p2) => p1.Identifier == p2.Identifier);
+		//						if (e)
+		//							return true;
+		//					}
+		//				}
+
+		//				//foreach (var cons in prop2.Constraints.SubConstraints)
+		//				//{
+		//				//	if (prop1.Type != cons.Group)
+		//				//		continue;
+		//				//	else
+		//				//	{
+		//				//		bool e = cons.Evaluate(prop1, (p1, p2) => p1.Identifier == p2.Identifier);
+		//				//		if (e)
+		//				//			return true;
+		//				//	}
+		//				//}
+
+		//				return false;
+		//			}
+		//			private bool CheckProperties(EmpirePropertyViewModel Property1, EmpirePropertyViewModel Property2)
+		//			{
+		//				var prop1 = Property1.Source;
+		//				var prop2 = Property2.Source;
+
+		//				foreach (var cons in prop1.Constraints.SubConstraints)
+		//				{
+		//					if (prop2.Type != cons.Group)
+		//						continue;
+		//					else
+		//					{
+		//						bool e = cons.Evaluate(prop2, (p1, p2) => p1.Identifier == p2.Identifier);
+		//						if (!e)
+		//							return false;
+		//					}
+		//				}
+
+		//				foreach (var cons in prop2.Constraints.SubConstraints)
+		//				{
+		//					if (prop1.Type != cons.Group)
+		//						continue;
+		//					else
+		//					{
+		//						bool e = cons.Evaluate(prop1, (p1, p2) => p1.Identifier == p2.Identifier);
+		//						if (!e)
+		//							return false;
+		//					}
+		//				}
+
+		//				return true;
+		//			}
+		//			private bool CheckProperty(EmpirePropertyViewModel Property)
+		//			{
+		//				var prop = Property.Source;
+
+		//				foreach (var sol in Solution)
+		//				{
+		//					if (!CheckProperties(Property, sol))
+		//						return false;
+		//				}
+
+		//				switch (prop.Type)
+		//				{
+		//					case EmpirePropertyType.Authority:
+		//						break;
+		//					case EmpirePropertyType.Civics:
+		//						//if (CivicPointsAvailable == 0)
+		//						//	return false;
+		//						break;
+		//					case EmpirePropertyType.Ethics:
+		//						if (Property.Source.AsEthic.EthicCost > EthicPointsAvailable)
+		//							return false;
+		//						break;
+		//					case EmpirePropertyType.Origin:
+		//						break;
+		//					case EmpirePropertyType.Species:
+		//						break;
+		//					case EmpirePropertyType.Trait:
+		//						break;
+		//				}
+
+		//				return true;
+		//			}
+
+		//			private void PickProperty(EmpirePropertyViewModel Property)
+		//			{
+		//				for (int i = 0; i < RemainingIndexes.Count;)
+		//				{
+		//					var index = RemainingIndexes[i];
+		//					var prop = Properties[index];
+
+		//					if (!CheckProperties(Property, prop))
+		//						RemoveProperty(i, prop.Weight);
+		//					else
+		//						i++;
+		//				}
+
+		//				switch (Property.Source.Type)
+		//				{
+		//					case EmpirePropertyType.Authority:
+		//						PickAuthority();
+		//						break;
+		//					case EmpirePropertyType.Civics:
+		//						PickCivic();
+		//						break;
+		//					case EmpirePropertyType.Ethics:
+		//						PickEthic();
+		//						break;
+		//					case EmpirePropertyType.Origin:
+		//						HasOrigin = true;
+		//						RemoveOrigins();
+		//						break;
+		//					case EmpirePropertyType.Species:
+		//						break;
+		//					case EmpirePropertyType.Trait:
+		//						break;
+		//				}
+		//			}
+
+		//			private void PickAuthority()
+		//			{
+		//				HasAuthority = true;
+		//				RemoveAuthorities();
+		//			}
+		//			private void PickCivic()
+		//			{
+		//				CivicPointsAvailable--;
+		//				RemoveCivics();
+		//			}
+		//			private void PickEthic()
+		//			{
+		//				EthicPointsAvailable -= CurrentPick.Source.AsEthic.EthicCost;
+		//				RemoveEthics();
+		//			}
+
+		//			private void RemoveType(EmpirePropertyType Type)
+		//			{
+		//				var first = RemainingIndexes.First(i => Properties[i].Source.Type == Type);
+		//				for (int i = first; i < RemainingIndexes.Count;)
+		//				{
+		//					var index = RemainingIndexes[i];
+		//					var prop = Properties[index].Source;
+
+		//					if (prop.Type == Type)
+		//						RemoveProperty(i, prop.Weight);
+		//					else
+		//						break;
+		//				}
+		//			}
+		//			private void RemoveAuthorities()
+		//			{
+		//				RemoveType(EmpirePropertyType.Authority);
+		//			}
+		//			private void RemoveCivics()
+		//			{
+		//				if (CivicPointsAvailable == 1)
+		//				{
+		//					// Remove civics that are now impossible because of the first civic selection
+		//					var first = RemainingIndexes.First(i => Properties[i].Source.Type == EmpirePropertyType.Civics);
+
+		//					//var toRemove = new List<EmpirePropertyViewModel>();
+
+		//					for (int i = first; i < RemainingIndexes.Count;)
+		//					{
+		//						var index = RemainingIndexes[i];
+		//						var civicVm = Properties[index];
+
+		//						if (civicVm.Source.Type == EmpirePropertyType.Civics)
+		//						{
+		//							var b = HasPotentMatches(civicVm);
+
+		//							if (!b)
+		//								RemoveProperty(i, civicVm.Weight);
+		//							else
+		//								i++;
+		//						}
+		//						else
+		//							break;
+		//					}
+		//				}
+		//				else if (CivicPointsAvailable == 0)
+		//					RemoveType(EmpirePropertyType.Civics);
+		//			}
+
+		//			private void RemoveEthics()
+		//			{
+		//				if (EthicPointsAvailable == 0)
+		//					RemoveType(EmpirePropertyType.Ethics);
+
+		//				//// Remove civics that are now impossible because of the first civic selection
+		//				//var first = RemainingIndexes.First(i => Properties[i].Source.Type == EmpirePropertyType.Ethics);
+
+		//				////var toRemove = new List<EmpirePropertyViewModel>();
+
+		//				//for (int i = first; i < RemainingIndexes.Count;)
+		//				//{
+		//				//	var index = RemainingIndexes[i];
+		//				//	var ethicVm = Properties[index];
+		//				//	var ethic = ethicVm.Source.AsEthic;
+
+		//				//	if (ethic != null)
+		//				//	{
+		//				//		//if (ethic.EthicCost > EthicPointsAvailable)
+
+		//				//		//var b = HasPotentMatches(ethic);
+
+		//				//		//if (!b)
+		//				//		//	RemoveProperty(i, ethic.Weight);
+		//				//		//else
+		//				//		//	i++;
+		//				//	}
+		//				//	else
+		//				//		break;
+		//				//}
+		//			}
+
+		//			private void RemoveOrigins()
+		//			{
+		//				RemoveType(EmpirePropertyType.Origin);
+		//			}
+
+		//			private IEnumerable<EmpirePropertyViewModel> ImpossibleProperties(EmpirePropertyViewModel Pick)
+		//			{
+		//				//var constraints = Pick.Source.Potential.SubConstraints.Concat(Pick.Source.Possible.SubConstraints).ToList();
+		//				//ICollection<EmpirePropertyViewModel> toRemove = new List<EmpirePropertyViewModel>();
+		//				//ICollection<EmpirePropertyViewModel> toRemove2 = new List<EmpirePropertyViewModel>();
+
+		//				//foreach (var prop in RemainingProperties.Where(p => p != Pick))
+		//				//{
+		//				//	foreach (var c in constraints)
+		//				//	{
+		//				//		if (c.Group != prop.Source.Type)
+		//				//			continue;
+
+		//				//		bool e = c.Evaluate(prop, (p1, p2) => p1.Identifier == p2.Source.Identifier);
+		//				//		if (!e)
+		//				//			toRemove.Add(prop);
+		//				//	}
+		//				//}
+
+		//				//var except = RemainingProperties.Except(toRemove);
+
+
+		//				//foreach(var pickType in RemainingProperties)
+
+		//				throw new NotImplementedException();
+		//			}
+
+		//			private void RemoveProperty(int Index)
+		//			{
+		//				int weight = Properties[Index].Weight;
+		//				RemoveProperty(Index, weight);
+		//			}
+		//			private void RemoveProperty(int Index, int Weight)
+		//			{
+		//#if DEBUG
+		//				Debug.WriteLine(Properties[RemainingIndexes[Index]]);
+		//#endif
+		//				RemainingIndexes.RemoveRange(Index, Weight);
+		//			}
+
+		//			public GeneratorNode Iterate()
+		//			{
+		//				// No further options, continue with parent node
+		//				if (RemainingIndexes.Count == 0)
+		//					return Parent;
+
+		//				// Pick randomly an property
+		//				int pickedIndex = Rnd.Next(RemainingIndexes.Count);
+		//				int pickedRemainingIndex = RemainingIndexes[pickedIndex];
+		//				CurrentPick = Properties[pickedRemainingIndex];
+
+		//				//RemainingIndexes.RemoveAt(pickedIndex);
+		//				pickedIndex = Properties.FindIndex(p => p.Source.Identifier == "ethic_fanatic_authoritarian");
+		//				CurrentPick = Properties.First(p => p.Source.Identifier == "ethic_fanatic_authoritarian");
+
+		//				RemoveProperty(pickedIndex, CurrentPick.Weight);
+
+		//				// Check if this item fits in the current selection
+		//				if (!CheckProperty(CurrentPick))
+		//					return this;
+
+
+
+
+		//				// Remove all same-items (if the picked property had a weight > 1)
+		//				//int weight;
+		//				//if ((weight = pickedProp.Weight) > 1)
+		//				//	RemainingIndexes.RemoveRange(pickedIndex + 1, weight - 1);
+
+		//				PickProperty(CurrentPick);
+
+		//				return new GeneratorNode(this, CurrentPick);
+
+		//				// Check if already picked items and newly picked one are compatible to each other
+
+		//				//var imp = ImpossibleProperties(pickedProp);
+		//				//switch
+
+		//				// Remove the index from the list
+
+
+
+		//				//RemainingProperties.
+
+		//				//return null;
+
+		//				throw new NotImplementedException();
+		//			}
+
+		//			public static GeneratorNode CreateRoot(IEnumerable<EmpirePropertyViewModel> Source)
+		//			{
+		//				GeneratorNode node = new GeneratorNode(Source);
+		//				return node;
+		//			}
+		//}
+
+		#endregion
 	}
 
 	[JsonObject(IsReference = true)]
@@ -443,6 +935,15 @@ namespace StellarisEmpireGenerator.Models
 				fntProperty.NonFanaticVariant = this;
 				//fntProperty.NonFanaticVariantId = this.Identifier;
 			}
+
+			var ethics = Properties.Where(p => (p.Type == EmpirePropertyType.Ethics) && (p != this)).ToList();
+			var incompatibleEthics = ethics
+				.Where(p => p.AsEthic.EthicCost + EthicCost > MaximumEthicPoints)
+				.Concat(
+					ethics.Where(p => p.AsEthic.EthicCategory == EthicCategory));
+
+			foreach (var e in incompatibleEthics)
+				AddConstraint(Condition.Nor, e);
 		}
 	}
 
@@ -556,8 +1057,6 @@ namespace StellarisEmpireGenerator.Models
 
 		public int TraitCost { get; set; } = default;
 
-
-
 		private static bool IsTrait(Entity Node)
 		{
 			return
@@ -619,49 +1118,53 @@ namespace StellarisEmpireGenerator.Models
 		protected override void UpdateRelationsToOtherEmpireProperties(IEnumerable<EmpireProperty> Properties)
 		{
 			// Extract trait opposites
-			foreach (var prop in Properties)
-			{
-				EmpirePropertyTrait trait = prop.AsTrait;
-				if (trait == null)
-					continue;
+			//foreach (var prop in Properties)
+			//{
+			//	EmpirePropertyTrait trait = prop.AsTrait;
+			//	if (trait == null)
+			//		continue;
 
-				trait.TraitOpposites = ExtractTraitOpposites(trait.SourceEntity, Properties);
-				trait.TraitAllowedSpecies = ExtractTraitAllowedArchetypes(trait.SourceEntity, Properties);
-			}
+			//	trait.TraitOpposites = ExtractTraitOpposites(trait.SourceEntity, Properties);
+			//	trait.TraitAllowedSpecies = ExtractTraitAllowedArchetypes(trait.SourceEntity, Properties);
+			//}
 
-			if (TraitOpposites != null && TraitOpposites.Count() > 0)
-			{
-				Constraint<EmpireProperty> constraintTrait = new Constraint<EmpireProperty>(Condition.Each)
-				{
-					Group = EmpirePropertyType.Trait
-				};
+			TraitOpposites = ExtractTraitOpposites(SourceEntity, Properties);
+			TraitAllowedSpecies = ExtractTraitAllowedArchetypes(SourceEntity, Properties);
 
-				Constraint<EmpireProperty> constraintTraitNor = new Constraint<EmpireProperty>(Condition.Nor);
-				foreach (var opp in TraitOpposites)
-				{
-					constraintTraitNor.Objects.Add(opp);
-				}
+			foreach (var opp in TraitOpposites)
+				AddConstraint(Condition.Nor, opp);
 
-				constraintTrait.SubConstraints.Add(constraintTraitNor);
-				Possible.SubConstraints.Add(constraintTrait);
-			}
+			foreach (var allowedSp in TraitAllowedSpecies)
+				AddConstraint(Condition.Or, allowedSp);
+			//if (TraitOpposites != null && TraitOpposites.Count() > 0)
+			//{
+			//	Constraint<EmpireProperty> constraintTrait = new Constraint<EmpireProperty>(Condition.Each)
+			//	{
+			//		Group = EmpirePropertyType.Trait
+			//	};
 
-			if (TraitAllowedSpecies != null && TraitAllowedSpecies.Count() > 0)
-			{
-				Constraint<EmpireProperty> constraintSpec = new Constraint<EmpireProperty>(Condition.Each)
-				{
-					Group = EmpirePropertyType.Species
-				};
+			//	Constraint<EmpireProperty> constraintTraitNor = new Constraint<EmpireProperty>(Condition.Nor);
+			//	foreach (var opp in TraitOpposites)
+			//		constraintTraitNor.Objects.Add(opp);
 
-				Constraint<EmpireProperty> constraintSpecOr = new Constraint<EmpireProperty>(Condition.Or);
-				foreach (var spec in TraitAllowedSpecies)
-				{
-					constraintSpecOr.Objects.Add(spec);
-				}
+			//	constraintTrait.SubConstraints.Add(constraintTraitNor);
+			//	Possible.SubConstraints.Add(constraintTrait);
+			//}
 
-				constraintSpec.SubConstraints.Add(constraintSpecOr);
-				Possible.SubConstraints.Add(constraintSpec);
-			}
+			//if (TraitAllowedSpecies != null && TraitAllowedSpecies.Count() > 0)
+			//{
+			//	Constraint<EmpireProperty> constraintSpec = new Constraint<EmpireProperty>(Condition.Each)
+			//	{
+			//		Group = EmpirePropertyType.Species
+			//	};
+
+			//	Constraint<EmpireProperty> constraintSpecOr = new Constraint<EmpireProperty>(Condition.Or);
+			//	foreach (var spec in TraitAllowedSpecies)
+			//		constraintSpecOr.Objects.Add(spec);
+
+			//	constraintSpec.SubConstraints.Add(constraintSpecOr);
+			//	Possible.SubConstraints.Add(constraintSpec);
+			//}
 		}
 	}
 
@@ -752,6 +1255,25 @@ namespace StellarisEmpireGenerator.Models
 			{
 				Constraint<T> constraint = new Constraint<T>(Condition.Or);
 				return constraint;
+			}
+		}
+
+		public override string ToString()
+		{
+			if (Group != EmpirePropertyType.Unknown)
+				return Group.ToString();
+			else
+			{
+				if (Objects.Count > 0)
+				{
+					string output = LogicGate.ToString() + ": " + Objects[0];
+					foreach (var obj in Objects.Skip(1))
+						output += obj.ToString();
+
+					return output;
+				}
+				else
+					return LogicGate.ToString();
 			}
 		}
 	}

@@ -148,5 +148,11 @@
   <ItemGroup>
     <WCFMetadata Include="Connected Services\" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\StellarisEmpireGenerator.Core\StellarisEmpireGenerator.Core.csproj">
+      <Project>{fecbbec1-02e7-4479-af52-5b905335b194}</Project>
+      <Name>StellarisEmpireGenerator.Core</Name>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
