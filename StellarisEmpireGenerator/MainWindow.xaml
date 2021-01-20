@@ -8,7 +8,7 @@
         mc:Ignorable="d"
         Title="MainWindow" Height="688.027" Width="1388" Closing="Window_Closing"
         xmlns:v="clr-namespace:StellarisEmpireGenerator.Views"
-        xmlns:m="clr-namespace:StellarisEmpireGenerator.Models"
+        xmlns:m="clr-namespace:StellarisEmpireGenerator.Core.EmpireProperties;assembly=StellarisEmpireGenerator.Core"
         xmlns:xc="http://schemas.xceed.com/wpf/xaml/toolkit">
     <Window.DataContext>
         <seg:MainViewModel/>

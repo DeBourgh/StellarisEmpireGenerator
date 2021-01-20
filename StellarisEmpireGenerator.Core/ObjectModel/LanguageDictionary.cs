@@ -8,9 +8,9 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
-using StellarisEmpireGenerator.Core;
+using StellarisEmpireGenerator.Core.ObjectModel;
 
-namespace StellarisEmpireGenerator.Models
+namespace StellarisEmpireGenerator.ObjectModel
 {
 	public class LanguageDictionary
 	{

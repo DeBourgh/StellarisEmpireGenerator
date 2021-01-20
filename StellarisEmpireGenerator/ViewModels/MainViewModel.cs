@@ -8,11 +8,13 @@ using System.Threading.Tasks;
 using System.IO;
 using System.Windows.Input;
 using StellarisEmpireGenerator.Core;
+using StellarisEmpireGenerator.Core.EmpireProperties;
 
-using StellarisEmpireGenerator.Models;
+using StellarisEmpireGenerator.ObjectModel;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using Newtonsoft.Json;
+using StellarisEmpireGenerator.Core.ObjectModel;
 
 namespace StellarisEmpireGenerator.ViewModels
 {

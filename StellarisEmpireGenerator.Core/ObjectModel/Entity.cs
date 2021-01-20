@@ -1,17 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
-using StellarisEmpireGenerator.Core;
-
-namespace StellarisEmpireGenerator.Models
+namespace StellarisEmpireGenerator.Core.ObjectModel
 {
-
 	public class Entity
 	{
 		public const string BLOCK_BEGIN = "{";
@@ -502,34 +497,5 @@ namespace StellarisEmpireGenerator.Models
 		public bool HasChildren { get => (Value as IEntityValue<IEnumerable<Entity>>) != null; }
 
 		#endregion
-	}
-
-	public interface IEntityValue
-	{
-		object Value { get; set; }
-	}
-
-
-	public interface IEntityValue<T> : IEntityValue
-	{
-		new T Value { get; set; }
-	}
-
-	public class EntityValue<T> : IEntityValue<T>
-	{
-		public EntityValue() { }
-		public EntityValue(T Value) : this()
-		{
-			this.Value = Value;
-		}
-
-		public T Value { get; set; }
-
-		object IEntityValue.Value { get => Value; set { Value = (T)value; } }
-
-		public override string ToString()
-		{
-			return Value?.ToString() ?? base.ToString();
-		}
 	}
 }

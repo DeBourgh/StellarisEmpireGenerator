@@ -1,4 +1,4 @@
-﻿using StellarisEmpireGenerator.Models;
+﻿using StellarisEmpireGenerator.ObjectModel;
 using StellarisEmpireGenerator.ViewModels;
 
 using System;
@@ -7,97 +7,7 @@ using System.Linq;
 
 namespace StellarisEmpireGenerator.Core
 {
-	public static class EntityExtensions
-	{
-		public static Entity FirstOrDefaultKey(this IEnumerable<Entity> Source, string Key)
-		{
-			return Source.WhereKey(Key).FirstOrDefault();
-		}
-		public static Entity FirstOrDefaultText(this IEnumerable<Entity> Source, string Text)
-		{
-			return Source.WhereText(Text).FirstOrDefault();
-		}
-		public static Entity FirstOrDefaultPair(this IEnumerable<Entity> Source, string Key, string Text)
-		{
-			return Source.WherePair(Key, Text).FirstOrDefault();
-		}
-		public static Entity FirstOrDefaultKey(this IEnumerable<Entity> Source, string Key, Func<Entity, bool> Predicate)
-		{
-			return Source.WhereKey(Key).FirstOrDefault(e => Predicate(e));
-		}
-		public static Entity FirstOrDefaultText(this IEnumerable<Entity> Source, string Text, Func<Entity, bool> Predicate)
-		{
-			return Source.WhereText(Text).FirstOrDefault(e => Predicate(e));
-		}
-		public static Entity FirstOrDefaultPair(this IEnumerable<Entity> Source, string Key, string Text, Func<Entity, bool> Predicate)
-		{
-			return Source.WherePair(Key, Text).FirstOrDefault(e => Predicate(e));
-		}
-		public static bool ContainsKey(this IEnumerable<Entity> Source, string Key)
-		{
-			return Source.FirstOrDefaultKey(Key) != null;
-		}
-		public static bool ContainsPair(this IEnumerable<Entity> Source, string Key, string Text)
-		{
-			return Source.FirstOrDefaultPair(Key, Text) != null;
-		}
-		//public static bool ContainsPath(this IEnumerable<Entity> Source, params string[] KeyPath)
-		//{
-		//	if (KeyPath is null)
-		//		throw new ArgumentNullException(nameof(KeyPath));
 
-
-
-		//	var firstOfPath = Source.WhereKey(KeyPath[0]);
-
-		//	foreach (var firsts in firstOfPath)
-		//	{
-		//		int i = 1;
-		//		Entity next = firsts.Children.FirstOrDefaultKey(KeyPath[i]);
-
-		//		while (i < KeyPath.Length)
-		//		{
-
-
-		//			if (next != null)
-		//			{
-
-		//			}
-		//		}
-		//	}
-		//}
-		//public static bool ContainsPath(this IEnumerable<Entity> Source, string TextValue, params string[] KeyPath)
-		//{
-		//	if (KeyPath is null)
-		//		throw new ArgumentNullException(nameof(KeyPath));
-
-		//	var firstOfPath = Source.WhereKey(KeyPath[0]);
-
-		//	Entity firstFound = Source.FirstOrDefault
-		//}
-
-		public static IEnumerable<Entity> WhereKey(this IEnumerable<Entity> Source, string Key)
-		{
-			return Source.Where(e => e.Key.Equals(Key));
-		}
-
-		public static IEnumerable<Entity> WhereText(this IEnumerable<Entity> Source, string Text)
-		{
-			return Source.Where(e => e.Text?.Equals(Text) ?? false);
-		}
-
-		public static IEnumerable<Entity> WherePair(this IEnumerable<Entity> Source, string Key, string Text)
-		{
-			return Source.WhereKey(Key).WhereText(Text);
-		}
-
-		public static bool AnyPair(this IEnumerable<Entity> Source, string Key, string Text)
-		{
-			return Source.WherePair(Key, Text).Any();
-		}
-
-		//public static IEnumerable<Entity>(this En)
-	}
 
 	public static class EnumerableExtension
 	{

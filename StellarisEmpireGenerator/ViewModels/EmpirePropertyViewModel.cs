@@ -1,5 +1,7 @@
 ﻿using StellarisEmpireGenerator.Core;
-using StellarisEmpireGenerator.Models;
+using StellarisEmpireGenerator.Core.EmpireProperties;
+using StellarisEmpireGenerator.ObjectModel;
+
 
 using System.Windows.Input;
 

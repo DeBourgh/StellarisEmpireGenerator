@@ -78,9 +78,6 @@
     <Compile Include="Core\Extensions.cs" />
     <Compile Include="Core\ObservableObject.cs" />
     <Compile Include="Models\ConfigFileModel.cs" />
-    <Compile Include="Models\EmpirePropertyModel.cs" />
-    <Compile Include="Models\LanguageDictionary.cs" />
-    <Compile Include="Models\ObjectModel.cs" />
     <Compile Include="ViewModels\EmpirePropertyViewModel.cs" />
     <Compile Include="ViewModels\EmpireViewModel.cs" />
     <Compile Include="ViewModels\MainViewModel.cs" />
@@ -150,7 +147,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\StellarisEmpireGenerator.Core\StellarisEmpireGenerator.Core.csproj">
-      <Project>{fecbbec1-02e7-4479-af52-5b905335b194}</Project>
+      <Project>{fc030864-902c-4546-b758-06475655afa9}</Project>
       <Name>StellarisEmpireGenerator.Core</Name>
     </ProjectReference>
   </ItemGroup>

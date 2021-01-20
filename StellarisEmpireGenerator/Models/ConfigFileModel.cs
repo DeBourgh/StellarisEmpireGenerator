@@ -3,7 +3,7 @@ using System.IO;
 
 using Newtonsoft.Json;
 
-namespace StellarisEmpireGenerator.Models
+namespace StellarisEmpireGenerator.ObjectModel
 {
 	public class ConfigModel
 	{
