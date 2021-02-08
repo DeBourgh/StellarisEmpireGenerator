@@ -17,10 +17,7 @@ namespace StellarisEmpireGenerator.Core
 		/// <typeparam name="T"></typeparam>
 		/// <param name="item"></param>
 		/// <returns></returns>
-		public static IEnumerable<T> Yield<T>(this T item)
-		{
-			yield return item;
-		}
+
 	}
 
 	public static class IOExtensions

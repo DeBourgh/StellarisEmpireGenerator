@@ -30,27 +30,27 @@
             
             <StackPanel Grid.Row="0" Grid.Column="0">
                 <Label Content="Species:"/>
-                <Label Content="{Binding Species}" Margin="6,0,0,0"/>
+                <Label Content="{Binding SpeciesText}" Margin="6,0,0,0"/>
             </StackPanel>
             <StackPanel Grid.Row="0" Grid.Column="1">
                 <Label Content="Authority:"/>
-                <Label Content="{Binding Authority}" Margin="6,0,0,0"/>
+                <Label Content="{Binding AuthorityText}" Margin="6,0,0,0"/>
             </StackPanel>
             <StackPanel Grid.Row="1" Grid.Column="0">
                 <Label Content="Ethics:"/>
-                <ListBox ItemsSource="{Binding Ethics}" Margin="6,0,0,0"/>
+                <ListBox ItemsSource="{Binding EthicsTexts}" Margin="6,0,0,0"/>
             </StackPanel>
             <StackPanel Grid.Row="1" Grid.Column="1">
                 <Label Content="Civics:"/>
-                <ListBox ItemsSource="{Binding Civics}" Margin="6,0,0,0"/>
+                <ListBox ItemsSource="{Binding CivicsTexts}" Margin="6,0,0,0"/>
             </StackPanel>
             <StackPanel Grid.Row="2" Grid.Column="0">
                 <Label Content="Traits:"/>
-                <ListBox ItemsSource="{Binding Traits}" Margin="6,0,0,0"/>
+                <ListBox ItemsSource="{Binding TraitsTexts}" Margin="6,0,0,0"/>
             </StackPanel>
             <StackPanel Grid.Row="2" Grid.Column="1">
                 <Label Content="Origin:"/>
-                <Label Content="{Binding Origin}" Margin="6,0,0,0"/>
+                <Label Content="{Binding OriginText}" Margin="6,0,0,0"/>
             </StackPanel>
         </Grid>   
     </DockPanel>

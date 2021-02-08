@@ -33,7 +33,6 @@ namespace StellarisEmpireGenerator.ObjectModel
 				//Debug.WriteLine(file);
 				using (StreamReader sr = new StreamReader(file))
 				{
-					int c = 0;
 					while (!sr.EndOfStream)
 					{
 

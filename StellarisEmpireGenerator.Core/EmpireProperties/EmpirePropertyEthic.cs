@@ -15,11 +15,9 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 		public EmpirePropertyEthic() : base() { }
 		private EmpirePropertyEthic(Entity SourceEntity) : base(SourceEntity, EmpirePropertyType.Ethics)
 		{
-			EthicCost = ExtractEthicCost(SourceEntity);
+			Cost = ExtractEthicCost(SourceEntity);
 			EthicCategory = ExtractEthicCategory(SourceEntity);
 		}
-
-		public int EthicCost { get; set; } = 1;
 
 		public string EthicCategory { get; set; } = string.Empty;
 
@@ -29,10 +27,6 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 		[JsonProperty(ReferenceLoopHandling = ReferenceLoopHandling.Ignore, IsReference = true)]
 		public EmpirePropertyEthic FanaticVariant { get; set; } = null;
 
-		//[DataMember]
-		//private string NonFanaticVariantId { get; set; }
-		//[DataMember]
-		//private string FanaticVariantId { get; set; }
 		[JsonIgnore]
 		public bool IsFanatic { get => FanaticVariant != null; }
 
@@ -50,7 +44,7 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 			return Node.Children.FirstOrDefaultKey("fanatic_variant");
 		}
 
-		private static bool IsEthic(Entity Node)
+		private static bool IsNodeEthic(Entity Node)
 		{
 			return
 				Node.Key.StartsWith("ethic_") &&
@@ -59,19 +53,55 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 
 		internal static EmpirePropertyEthic EthicFromNode(Entity Node)
 		{
-			if (IsEthic(Node))
+			if (IsNodeEthic(Node))
 				return new EmpirePropertyEthic(Node);
 			else
 				return null;
 		}
 
-		protected override void UpdateRelationsToOtherEmpireProperties(IEnumerable<EmpireProperty> Properties)
+		protected override bool OnAdding(EmpireProperty Pick, GeneratorNode Node)
 		{
+			if (Node.EthicPointsAvailable - Cost < 0)
+				return false;
+
+			return base.OnAdding(Pick, Node);
+		}
+
+		protected override void OnAdded(GeneratorNode Node)
+		{
+			Node.EthicPointsAvailable -= Cost;
+
+
+
+			base.OnAdded(Node);
+		}
+
+		protected override bool OnRemoving(GeneratorNode Node)
+		{
+			if (Node.HasEthics)
+				return true;
+
+			return base.OnRemoving(Node);
+		}
+
+		protected override Constraint ExtractConstraint(IEnumerable<EmpireProperty> Properties)
+		{
+			var constraint = base.ExtractConstraint(Properties);
+
+			//var ethics = Properties.Where(p => (p.Type == EmpirePropertyType.Ethics) && (p != this)).ToList();
+			//var incompatibleEthics = ethics
+			//	.Where(p => p.Cost + Cost > MaxEthics)
+			//	.Concat(
+			//		ethics.Where(p => p.AsEthic.EthicCategory == EthicCategory));
+
+
+			//constraint.Add(Condition.Nor, EmpirePropertyType.Ethics, incompatibleEthics);
+
 			var fnt = ExtractFanaticVariant(SourceEntity);
 
 			if (fnt != null)
 			{
-				var fntProperty = Properties.First(p => p.Identifier == fnt.Text) as EmpirePropertyEthic;
+				var fntProperty = Properties.First(p => p.Identifier == fnt.Text).AsEthic;
 
 				FanaticVariant = fntProperty;
 				//FanaticVariant.FanaticVariantId = fntProperty.Identifier;
@@ -86,14 +116,36 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 				//fntProperty.NonFanaticVariantId = this.Identifier;
 			}
 
-			var ethics = Properties.Where(p => (p.Type == EmpirePropertyType.Ethics) && (p != this)).ToList();
-			var incompatibleEthics = ethics
-				.Where(p => p.AsEthic.EthicCost + EthicCost > MaximumEthicPoints)
-				.Concat(
-					ethics.Where(p => p.AsEthic.EthicCategory == EthicCategory));
-
-			foreach (var e in incompatibleEthics)
-				AddConstraint(Condition.Nor, e);
+			return constraint;
 		}
+		//{
+		//	var fnt = ExtractFanaticVariant(SourceEntity);
+
+		//	if (fnt != null)
+		//	{
+		//		var fntProperty = Properties.First(p => p.Identifier == fnt.Text) as EmpirePropertyEthic;
+
+		//		FanaticVariant = fntProperty;
+		//		//FanaticVariant.FanaticVariantId = fntProperty.Identifier;
+
+		//		NonFanaticVariant = this;
+		//		//NonFanaticVariantId = this.Identifier;
+
+		//		fntProperty.FanaticVariant = fntProperty;
+		//		//fntProperty.FanaticVariantId = fntProperty.Identifier;
+
+		//		fntProperty.NonFanaticVariant = this;
+		//		//fntProperty.NonFanaticVariantId = this.Identifier;
+		//	}
+
+		//	var ethics = Properties.Where(p => (p.Type == EmpirePropertyType.Ethics) && (p != this)).ToList();
+		//	var incompatibleEthics = ethics
+		//		.Where(p => p.AsEthic.EthicCost + EthicCost > MaximumEthicPoints)
+		//		.Concat(
+		//			ethics.Where(p => p.AsEthic.EthicCategory == EthicCategory));
+
+		//	foreach (var e in incompatibleEthics)
+		//		AddConstraint(Condition.Nor, e);
+		//}
 	}
 }

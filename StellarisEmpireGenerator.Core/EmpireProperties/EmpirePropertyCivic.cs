@@ -4,6 +4,7 @@ using StellarisEmpireGenerator.Core.ObjectModel;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace StellarisEmpireGenerator.Core.EmpireProperties
@@ -15,9 +16,37 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 
 		private EmpirePropertyCivic(Entity SourceEntity) : base(SourceEntity, EmpirePropertyType.Civics) { }
 
-		//public IEnumerable<EmpirePropertyTrait> SecondarySpeciesTraits { get; private set; } = Enumerable.Empty<EmpirePropertyTrait>();
+		protected override bool OnAdding(EmpireProperty Pick, GeneratorNode Node)
+		{
+			if (Node.HasCivics)
+				return false;
 
-		private static bool IsCivic(Entity Node)
+			return base.OnAdding(Pick, Node);
+		}
+
+		protected override void OnAdded(GeneratorNode Node)
+		{
+			Node.CivicPointsAvailable--;
+
+			if (Node.HasCivics)
+			{
+				foreach (var civic in Node.RemainingProperties.Where(p => p.IsCivic))
+					Node.RemoveSet.Add(civic);
+			}
+
+			base.OnAdded(Node);
+		}
+
+
+		protected override bool OnRemoving(GeneratorNode Node)
+		{
+			if (Node.HasCivics)
+				return true;
+
+			return base.OnRemoving(Node);
+		}
+
+		private static bool IsNodeCivic(Entity Node)
 		{
 			return
 				Node.Key.StartsWith("civic_") &&
@@ -26,12 +55,10 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 
 		internal static EmpirePropertyCivic CivicFromNode(Entity Node)
 		{
-			if (IsCivic(Node))
+			if (IsNodeCivic(Node))
 				return new EmpirePropertyCivic(Node);
 			else
 				return null;
 		}
-
-		protected override void UpdateRelationsToOtherEmpireProperties(IEnumerable<EmpireProperty> Properties) { }
 	}
 }

@@ -4,6 +4,7 @@ using StellarisEmpireGenerator.Core.ObjectModel;
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -11,11 +12,17 @@ using System.Text;
 namespace StellarisEmpireGenerator.Core.EmpireProperties
 {
 	[JsonObject(IsReference = true)]
-	public class EmpireProperty
+	public abstract class EmpireProperty
 	{
-		public static readonly int MaximumEthicPoints = 3;
+		public static int MaxAuthorities { get; set; } = 1;
+		public static int MaxCivics { get; set; } = 2;
+		public static int MaxEthics { get; set; } = 3;
+		public static int MaxOrigins { get; set; } = 1;
+		public static int MaxSpecies { get; set; } = 1;
+		public static int MaxTraits { get; set; } = -1; // Is not a fixed value, depends on the species
 
-		protected static readonly string[] LogicGatesAsString = Enum.GetNames(typeof(Condition)).Select(e => e.ToLower()).ToArray();
+		protected static readonly string[] LogicGatesAsString = new string[] { "nor", "or", "not" };
+
 		protected static readonly string[] EmpirePropertyTypesAsString = Enum.GetNames(typeof(EmpirePropertyType)).Select(e => e.ToLower()).ToArray();
 
 		protected EmpireProperty() { }
@@ -30,155 +37,114 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 
 		public string Identifier { get; set; } = string.Empty;
 
-		//public string Name { get; set; } = string.Empty;
-
 		public int Weight { get; set; } = 1;
 
 		public bool IsAllowed { get; set; } = true;
 
 		public EmpirePropertyType Type { get; set; } = EmpirePropertyType.Unknown;
 
-		public Constraint<EmpireProperty> Constraints { get; set; } = Constraint<EmpireProperty>.True;
+		public Constraint Constraints { get; set; } = null;
 
-		[JsonIgnore]
-		protected Constraint<EmpireProperty> Possible { get; private set; } = Constraint<EmpireProperty>.True;
-		[JsonIgnore]
-		protected Constraint<EmpireProperty> Potential { get; private set; } = Constraint<EmpireProperty>.True;
+		public virtual int Cost { get; set; } = 1;
 
 		[JsonIgnore]
 		public Entity SourceEntity { get; private set; }
 
-		//[JsonIgnore]
 		[JsonIgnore]
-		public EmpirePropertyAuthority AsAuthority { get => this as EmpirePropertyAuthority; }
+		public EmpirePropertyAuthority AsAuthority => this as EmpirePropertyAuthority;
 		[JsonIgnore]
-		public EmpirePropertyCivic AsCivic { get => this as EmpirePropertyCivic; }
+		public EmpirePropertyCivic AsCivic => this as EmpirePropertyCivic;
 		[JsonIgnore]
-		public EmpirePropertyEthic AsEthic { get => this as EmpirePropertyEthic; }
+		public EmpirePropertyEthic AsEthic => this as EmpirePropertyEthic;
 		[JsonIgnore]
-		public EmpirePropertyOrigin AsOrigin { get => this as EmpirePropertyOrigin; }
+		public EmpirePropertyOrigin AsOrigin => this as EmpirePropertyOrigin;
 		[JsonIgnore]
-		public EmpirePropertySpecies AsSpecies { get => this as EmpirePropertySpecies; }
+		public EmpirePropertySpecies AsSpecies => this as EmpirePropertySpecies;
 		[JsonIgnore]
-		public EmpirePropertyTrait AsTrait { get => this as EmpirePropertyTrait; }
+		public EmpirePropertyTrait AsTrait => this as EmpirePropertyTrait;
 
+		[JsonIgnore]
+		public bool IsAuthority => Type == EmpirePropertyType.Authority;
+		[JsonIgnore]
+		public bool IsCivic => Type == EmpirePropertyType.Civics;
+		[JsonIgnore]
+		public bool IsEthic => Type == EmpirePropertyType.Ethics;
+		[JsonIgnore]
+		public bool IsOrigin => Type == EmpirePropertyType.Origin;
+		[JsonIgnore]
+		public bool IsSpecies => Type == EmpirePropertyType.Species;
+		[JsonIgnore]
+		public bool IsTrait => Type == EmpirePropertyType.Trait;
 
+		//public abstract int MaxCountPerType { get; }
 
 		#endregion
 
 		#region Extraction Logic
 
-		private void MergeConstraints()
+		private bool ResolveValues(Constraint Into, Entity Node, IEnumerable<EmpireProperty> Properties, EmpirePropertyType Type, bool IsLogicGate)
 		{
-			foreach (var objs in Potential.Objects.Concat(Possible.Objects))
-				Constraints.Objects.Add(objs);
+			var values = Node.Children.WhereKey("value").Select(e => e.Text).ToList();
 
-			var subCons = Potential.SubConstraints.Concat(Possible.SubConstraints);
+			var properties = Properties.Where(p => values.Contains(p.Identifier));
 
-			if (subCons.Any())
+			string logicKey;
+			if (IsLogicGate && LogicGatesAsString.Contains(logicKey = Node.Key.ToLower()))
 			{
-				var first = subCons.First();
-				Constraints.SubConstraints.Add(first);
+				Condition logicGate = (Condition)Enum.Parse(typeof(Condition), logicKey, true);
+				Into.Add(logicGate, Type, properties);
 
-				foreach (var subCon in subCons.Skip(1))
+			}
+			else if (values.Any())
+			{
+				if (!properties.Any())
+					return false;
+
+				Into.Add(Condition.Required, Type, properties);
+			}
+
+			return true;
+		}
+
+		protected virtual Constraint ExtractConstraint(IEnumerable<EmpireProperty> Properties)
+		{
+			Constraint constraint = new Constraint();
+
+			var potentialChildren = SourceEntity.Children.FirstOrDefaultKey("potential")?.Children ?? Enumerable.Empty<Entity>();
+			var possibleChildren = SourceEntity.Children.FirstOrDefaultKey("possible")?.Children ?? Enumerable.Empty<Entity>();
+
+			var empireProperties = potentialChildren.Concat(possibleChildren);
+
+			foreach (var empireProperty in empireProperties)
+			{
+				var key = empireProperty.Key;
+				var text = empireProperty.Text;
+
+				if (EmpirePropertyTypesAsString.Contains(key))
 				{
-					bool added = false;
-					foreach (var con in Constraints.SubConstraints)
+					var empirePropType = (EmpirePropertyType)Enum.Parse(typeof(EmpirePropertyType), key, true);
+
+					if (!ResolveValues(constraint, empireProperty, Properties, empirePropType, false))
+						return null;
+
+					foreach (var epChild in empireProperty.Children)
 					{
-						if (con.Group == subCon.Group)
-						{
-							added = true;
+						if (!ResolveValues(constraint, epChild, Properties, empirePropType, true))
+							return null;
 
-							foreach (var groupSubCons in subCon.SubConstraints)
-								con.SubConstraints.Add(groupSubCons);
-
-							break;
-						}
 					}
 
-					if (!added)
-						Constraints.SubConstraints.Add(subCon);
 				}
-			}
-
-			Constraints.Objects.Sort((c1, c2) => c1.Type.CompareTo(c2.Type));
-			Constraints.SubConstraints.Sort((c1, c2) => c1.Group.CompareTo(c2.Group));
-		}
-
-		private static bool IsLogicGate(Entity Node)
-		{
-			return LogicGatesAsString.Contains(Node.Key.ToLower());
-		}
-
-		private static object ConstraintAllocator(Entity Node, IEnumerable<EmpireProperty> Properties)
-		{
-			if (Node.Key == "value")
-			{
-				var entity = Properties.FirstOrDefault(e => e.Identifier == Node.Text);
-
-				if (entity != null)
-					return entity;
-				else
-					return Constraint<EmpireProperty>.False;
-			}
-
-			return null;
-		}
-		private static Constraint<EmpireProperty> ExtractSubConstraints(Entity Node, IEnumerable<EmpireProperty> Properties, Func<Entity, IEnumerable<EmpireProperty>, object> Allocator)
-		{
-			Constraint<EmpireProperty> constraint = new Constraint<EmpireProperty>(Condition.Each);
-
-			if (Enum.TryParse(Node.Key, true, out EmpirePropertyType group))
-				constraint.Group = group;
-
-			if (IsLogicGate(Node))
-			{
-				constraint.LogicGate = (Condition)Enum.Parse(typeof(Condition), Node.Key, true);
-			}
-
-			foreach (var child in Node.Children)
-			{
-				if (child.HasChildren)
-					constraint.SubConstraints.Add(ExtractSubConstraints(child, Properties, Allocator));
-				else
+				else if (key == "always")
 				{
-					var text = child.Text;
-
-					if (text != null)
-					{
-						if (child.Key == "always")
-						{
-							if (text == "yes")
-								constraint.SubConstraints.Add(Constraint<EmpireProperty>.True);
-							else if (text == "no")
-								constraint.SubConstraints.Add(Constraint<EmpireProperty>.False);
-						}
-						else
-						{
-							var obj = Allocator(child, Properties);
-
-							if (obj is EmpireProperty prop)
-								constraint.Objects.Add(prop);
-							else if (obj is Constraint<EmpireProperty> cons)
-								constraint.SubConstraints.Add(cons);
-						}
-					}
+					if (text == "yes")
+						constraint.Always = true;
+					else if (text == "no")
+						constraint.Always = false;
 				}
 			}
 
 			return constraint;
-		}
-		private static Constraint<EmpireProperty> ExtractContraints(string KeyNode, Entity Node, IEnumerable<EmpireProperty> Properties, Func<Entity, IEnumerable<EmpireProperty>, object> Allocator)
-		{
-			var keyNode = Node.Children.FirstOrDefaultKey(KeyNode);
-
-			if (keyNode == null)
-				return Constraint<EmpireProperty>.True;
-			else
-			{
-				Constraint<EmpireProperty> constraints = ExtractSubConstraints(keyNode, Properties, Allocator);
-				return constraints;
-			}
 		}
 
 		#endregion
@@ -214,21 +180,22 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 						properties.Add(ep);
 				}
 
-				//var types = Enum.GetNames(typeof(EmpirePropertyType)).Select(x => x.ToLower()).ToArray();
-				//var children2 = properties.SelectMany(e => e.SourceEntity.Children.WhereKey("possible").Concat(e.SourceEntity.Children.WhereKey("potential")));
-				////var children2 = properties.Where(e => e.SourceEntity.Children.ContainsKey("possible") || e.SourceEntity.Children.ContainsKey("potential")).Select(x => x.SourceEntity);
-				//var children3 = children2.SelectMany(e => e.Children.Where(e2 => !types.Contains(e2.Key)));
-
-				foreach (var prop in properties)
+				foreach (var prop in properties.Where(p => p.Type == EmpirePropertyType.Species))
 				{
-					prop.Possible = ExtractContraints("possible", prop.SourceEntity, properties, ConstraintAllocator);
-					prop.Potential = ExtractContraints("potential", prop.SourceEntity, properties, ConstraintAllocator);
+					var constraints = prop.ExtractConstraint(properties);
+					prop.Constraints = constraints;
 
-					prop.UpdateRelationsToOtherEmpireProperties(properties);
+					if (constraints == null)
+						filter.Add(prop);
+				}
 
-					prop.MergeConstraints();
 
-					if (!properties.Any(p => prop.Potential.Evaluate(p, (p1, p2) => p1.Identifier == p2.Identifier)))
+				foreach (var prop in properties.Where(p => p.Type != EmpirePropertyType.Species))
+				{
+					var constraints = prop.ExtractConstraint(properties);
+					prop.Constraints = constraints;
+
+					if (constraints == null)
 						filter.Add(prop);
 				}
 			}
@@ -267,40 +234,6 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 			//	Node.Descendants.WhereKey("host_has_dlc", e => e.Ancestors.ContainsKey("playable"))?.Text ?? null;
 		}
 
-		protected virtual void UpdateRelationsToOtherEmpireProperties(IEnumerable<EmpireProperty> Properties) { }
-
-		protected void AddConstraint(Condition LogicGate, EmpireProperty Property)
-		{
-			var type = Property.Type;
-			Constraint<EmpireProperty> typeSubConstraint;
-
-			if ((typeSubConstraint = Constraints.SubConstraints.FirstOrDefault(c => c.Group == type)) == null)
-			{
-				typeSubConstraint = new Constraint<EmpireProperty>(Condition.Each)
-				{
-					Group = type
-				};
-
-				Constraints.SubConstraints.Add(typeSubConstraint);
-			}
-
-			if (LogicGate == Condition.Each)
-				typeSubConstraint.Objects.Add(Property);
-			else
-			{
-				Constraint<EmpireProperty> logicGateSubConstraint;
-
-				if ((logicGateSubConstraint = typeSubConstraint.SubConstraints.FirstOrDefault(c => c.LogicGate == LogicGate)) == null)
-				{
-					logicGateSubConstraint = new Constraint<EmpireProperty>(LogicGate);
-					typeSubConstraint.SubConstraints.Add(logicGateSubConstraint);
-				}
-
-				logicGateSubConstraint.Objects.Add(Property);
-
-			}
-		}
-
 		#region Object Overrides
 
 		public override string ToString()
@@ -330,14 +263,27 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 			if (Properties is null)
 				throw new ArgumentNullException(nameof(Properties));
 
-			throw new NotImplementedException();
+			GeneratorNode next = GeneratorNode.CreateRoot(Properties);
+
+			while (true)
+			{
+				next = next.Next();
+
+				if (next == null)
+					return null;
+				else if (next.IsSolution)
+					return next.Solution;
+			}
 		}
 		public static IEnumerable<IEnumerable<EmpireProperty>> GenerateSolution(IEnumerable<EmpireProperty> Properties, int Amount)
 		{
+			if (Properties is null)
+				throw new ArgumentNullException();
+
 			if (Amount < 1)
 				throw new ArgumentException(nameof(Amount));
 
-			List<IEnumerable<EmpireProperty>> solutions = new List<IEnumerable<EmpireProperty>>(Amount);
+			ICollection<IEnumerable<EmpireProperty>> solutions = new List<IEnumerable<EmpireProperty>>(Amount);
 
 			for (int i = 0; i < Amount; i++)
 				solutions.Add(GenerateSolution(Properties));
@@ -345,463 +291,584 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 			return solutions;
 		}
 
-		private class GeneratorNode
+		protected virtual IEnumerable<EmpireProperty> DependentProperties()
 		{
-			private static readonly Random rnd = new Random(Environment.TickCount);
 
-
+			if (Constraints.IsAlwaysYes)
+				return Enumerable.Empty<EmpireProperty>();
+			else
+				return Constraints.ConstraintGroups
+					.SelectMany(cg => cg.Value)
+					.Where(cg => (cg.LogicGate == Condition.Or) && (cg.Properties.Count == 1))
+					.Select(cg => cg.Properties.First());
 		}
 
-		//		public class GeneratorNode
+		protected IEnumerable<EmpireProperty> RequiredBy(IEnumerable<EmpireProperty> Source)
+		{
+			return Source.Where(p => p.Constraints.Requires(this));
+		}
+
+		protected virtual bool OnAdding(EmpireProperty Pick, GeneratorNode Node)
+		{
+			foreach (var solItem in Node.Solution)
+			{
+				if (!ValidateEachOther(Pick, solItem))
+					return false;
+			}
+
+			return true;
+		}
+		protected virtual void OnAdded(GeneratorNode Node)
+		{
+			foreach (var nfrc in Node.NonFulfilledRequiredConstraints)
+			{
+				var matchedConstraints = nfrc.Value.Where(cg => (cg.Type == Type) && cg.Validate(this)).ToArray();
+
+				foreach (var matchedConstraint in matchedConstraints)
+					nfrc.Value.Remove(matchedConstraint);
+			}
+
+			var newRequiredConstraints = Constraints.ConstraintGroups.Values.SelectMany(cgs => cgs).Where(cg => cg.LogicGate == Condition.Or);
+			ICollection<ConstraintGroup> newRequiredConstraintsList = new LinkedList<ConstraintGroup>(newRequiredConstraints);
+			Node.NonFulfilledRequiredConstraints.Add(this, newRequiredConstraintsList);
+		}
+
+		//protected virtual bool IsValidWith(EmpireProperty Prop)
+		//{
+		//	var propType = Prop.Type;
+		//	if (Constraints.ConstraintGroups.TryGetValue(propType, out IEnumerable<ConstraintGroup> cgs))
+		//	{
+		//		int maxOfType = MaxByType(propType);
+
+		//		foreach (var cg in cgs)
 		//		{
-		//			private static readonly Random Rnd = new Random(Environment.TickCount);
+		//			bool isValid = cg.Validate(Prop);
 
-		//			private GeneratorNode(IEnumerable<EmpireProperty> WeightedSource)
+		//			if (cg.LogicGate == Condition.Or)
 		//			{
-		//				Solution = new List<EmpireProperty>();
-		//				Properties = WeightedSource.OrderBy(p => $"{p.Type}_{p.Identifier}").ToList();
-		//				RemainingIndexes = Enumerable.Range(0, WeightedSource.Count()).ToList();
+		//				maxOfType -= cg.Properties.Min(p => p.Cost);
+
+		//				if (isValid)
+		//					return true;
+		//				else if (maxOfType == 0)
+		//					return false;
 		//			}
-
-		//			private GeneratorNode(GeneratorNode Parent, EmpireProperty PickedProperty)
-		//			{
-		//				this.Parent = Parent;
-
-		//				Solution = new List<EmpireProperty>(Parent.Solution)
-		//				{
-		//					PickedProperty
-		//				};
-
-		//				Properties = Parent.Properties;
-		//				RemainingIndexes = new List<int>(Parent.RemainingIndexes);
-
-		//				HasAuthority = Parent.HasAuthority;
-		//				CivicPointsAvailable = Parent.CivicPointsAvailable;
-		//				EthicPointsAvailable = Parent.EthicPointsAvailable;
-		//				HasOrigin = Parent.HasOrigin;
-		//				HasSpecies = Parent.HasSpecies;
-		//				TraitPointsAvailable = Parent.TraitPointsAvailable;
-		//			}
-
-		//			public GeneratorNode Parent { get; private set; }
-
-		//			public bool IsSolution { get => HasAuthority && HasCivics && HasEthics && HasOrigin && HasSpecies && HasTraits; }
-
-		//			private bool HasAuthority { get; set; }
-
-		//			private int CivicPointsAvailable { get; set; } = 2;
-		//			private bool HasCivics { get => CivicPointsAvailable == 0; }
-
-		//			private int EthicPointsAvailable { get; set; } = 3;
-		//			private bool HasEthics { get => EthicPointsAvailable == 0; }
-		//			private bool HasOrigin { get; set; }
-		//			private bool HasSpecies { get; set; }
-
-		//			private int TraitPointsAvailable { get; set; } = -1;
-		//			private bool HasTraits { get => TraitPointsAvailable == 0; }
-
-		//			//private int CivicsCount { get; private set; }
-		//			//public ObservableCollection<EmpireViewModel> Empires { get; } = new ObservableCollection<EmpireViewModel>();
-
-		//			public ICollection<EmpireProperty> Solution { get; }
-
-		//			public List<EmpireProperty> Properties { get; private set; }
-
-		//			private EmpireProperty CurrentPick { get; set; }
-
-		//			public List<EmpireProperty> RemainingProperties { get { return RemainingIndexes.Select(i => Properties[i]).ToList(); } }
-
-		//			//public Dictionary<int, EmpirePropertyViewModel> g;
-
-		//			public List<int> RemainingIndexes { get; }
-
-		//			//public IList<int> AttemptedPicks { get; }
-
-		//			//private bool HasPotentMatches()
-		//			//{
-		//			//	return false;
-		//			//}
-		//			private bool HasPotentMatches(EmpireProperty ToMatch)
-		//			{
-		//				var toMatch = ToMatch.Source;
-		//				var types = toMatch.Constraints.SubConstraints.Select(c => c.Group).Where(t => t != EmpirePropertyType.Unknown).ToList();
-		//				int typesCount = types.Count;
-		//				int remainingCount = RemainingIndexes.Count;
-
-		//				bool typeMatchFound = false;
-		//				bool eachTypeMatchFound = true;
-
-		//				var currentTypeIndex = 0;
-		//				bool isComparing = false;
-		//				int i = 0;
-		//				while ((currentTypeIndex < typesCount) && (i < remainingCount))
-		//				{
-		//					var prop = Properties[RemainingIndexes[i]];
-		//					var type = types[currentTypeIndex];
-
-		//					int cmp;
-
-		//					if ((cmp = prop.Source.Type.CompareTo(type)) == 0)
-		//					{
-		//						i++;
-
-		//						if (typeMatchFound)
-		//							continue;
-
-		//						isComparing = true;
-
-		//						bool e = Matches(ToMatch, prop);
-		//						typeMatchFound |= e;
-		//					}
-		//					else
-		//					{
-		//						if (cmp < 0)
-		//							i++;
-		//						else
-		//							currentTypeIndex++;
-
-		//						if (isComparing)
-		//						{
-		//							eachTypeMatchFound &= typeMatchFound;
-		//							typeMatchFound = false;
-
-		//							isComparing = false;
-
-		//							continue;
-		//						}
-		//					}
-		//				}
-
-		//				return eachTypeMatchFound;
-		//			}
-
-		//			private bool Matches(EmpirePropertyViewModel ToMatch, EmpirePropertyViewModel Matching)
-		//			{
-		//				var toMatch = ToMatch.Source;
-		//				var matching = Matching.Source;
-
-		//				foreach (var cons in toMatch.Constraints.SubConstraints)
-		//				{
-		//					if (matching.Type != cons.Group)
-		//						continue;
-		//					else
-		//					{
-		//						bool e = cons.Evaluate(matching, (p1, p2) => p1.Identifier == p2.Identifier);
-		//						if (e)
-		//							return true;
-		//					}
-		//				}
-
-		//				//foreach (var cons in prop2.Constraints.SubConstraints)
-		//				//{
-		//				//	if (prop1.Type != cons.Group)
-		//				//		continue;
-		//				//	else
-		//				//	{
-		//				//		bool e = cons.Evaluate(prop1, (p1, p2) => p1.Identifier == p2.Identifier);
-		//				//		if (e)
-		//				//			return true;
-		//				//	}
-		//				//}
-
+		//			else if ((cg.LogicGate == Condition.Nor) && (!isValid))
 		//				return false;
-		//			}
-		//			private bool CheckProperties(EmpirePropertyViewModel Property1, EmpirePropertyViewModel Property2)
-		//			{
-		//				var prop1 = Property1.Source;
-		//				var prop2 = Property2.Source;
+		//		}
+		//	}
 
-		//				foreach (var cons in prop1.Constraints.SubConstraints)
-		//				{
-		//					if (prop2.Type != cons.Group)
-		//						continue;
-		//					else
-		//					{
-		//						bool e = cons.Evaluate(prop2, (p1, p2) => p1.Identifier == p2.Identifier);
-		//						if (!e)
-		//							return false;
-		//					}
-		//				}
-
-		//				foreach (var cons in prop2.Constraints.SubConstraints)
-		//				{
-		//					if (prop1.Type != cons.Group)
-		//						continue;
-		//					else
-		//					{
-		//						bool e = cons.Evaluate(prop1, (p1, p2) => p1.Identifier == p2.Identifier);
-		//						if (!e)
-		//							return false;
-		//					}
-		//				}
-
-		//				return true;
-		//			}
-		//			private bool CheckProperty(EmpirePropertyViewModel Property)
-		//			{
-		//				var prop = Property.Source;
-
-		//				foreach (var sol in Solution)
-		//				{
-		//					if (!CheckProperties(Property, sol))
-		//						return false;
-		//				}
-
-		//				switch (prop.Type)
-		//				{
-		//					case EmpirePropertyType.Authority:
-		//						break;
-		//					case EmpirePropertyType.Civics:
-		//						//if (CivicPointsAvailable == 0)
-		//						//	return false;
-		//						break;
-		//					case EmpirePropertyType.Ethics:
-		//						if (Property.Source.AsEthic.EthicCost > EthicPointsAvailable)
-		//							return false;
-		//						break;
-		//					case EmpirePropertyType.Origin:
-		//						break;
-		//					case EmpirePropertyType.Species:
-		//						break;
-		//					case EmpirePropertyType.Trait:
-		//						break;
-		//				}
-
-		//				return true;
-		//			}
-
-		//			private void PickProperty(EmpirePropertyViewModel Property)
-		//			{
-		//				for (int i = 0; i < RemainingIndexes.Count;)
-		//				{
-		//					var index = RemainingIndexes[i];
-		//					var prop = Properties[index];
-
-		//					if (!CheckProperties(Property, prop))
-		//						RemoveProperty(i, prop.Weight);
-		//					else
-		//						i++;
-		//				}
-
-		//				switch (Property.Source.Type)
-		//				{
-		//					case EmpirePropertyType.Authority:
-		//						PickAuthority();
-		//						break;
-		//					case EmpirePropertyType.Civics:
-		//						PickCivic();
-		//						break;
-		//					case EmpirePropertyType.Ethics:
-		//						PickEthic();
-		//						break;
-		//					case EmpirePropertyType.Origin:
-		//						HasOrigin = true;
-		//						RemoveOrigins();
-		//						break;
-		//					case EmpirePropertyType.Species:
-		//						break;
-		//					case EmpirePropertyType.Trait:
-		//						break;
-		//				}
-		//			}
-
-		//			private void PickAuthority()
-		//			{
-		//				HasAuthority = true;
-		//				RemoveAuthorities();
-		//			}
-		//			private void PickCivic()
-		//			{
-		//				CivicPointsAvailable--;
-		//				RemoveCivics();
-		//			}
-		//			private void PickEthic()
-		//			{
-		//				EthicPointsAvailable -= CurrentPick.Source.AsEthic.EthicCost;
-		//				RemoveEthics();
-		//			}
-
-		//			private void RemoveType(EmpirePropertyType Type)
-		//			{
-		//				var first = RemainingIndexes.First(i => Properties[i].Source.Type == Type);
-		//				for (int i = first; i < RemainingIndexes.Count;)
-		//				{
-		//					var index = RemainingIndexes[i];
-		//					var prop = Properties[index].Source;
-
-		//					if (prop.Type == Type)
-		//						RemoveProperty(i, prop.Weight);
-		//					else
-		//						break;
-		//				}
-		//			}
-		//			private void RemoveAuthorities()
-		//			{
-		//				RemoveType(EmpirePropertyType.Authority);
-		//			}
-		//			private void RemoveCivics()
-		//			{
-		//				if (CivicPointsAvailable == 1)
-		//				{
-		//					// Remove civics that are now impossible because of the first civic selection
-		//					var first = RemainingIndexes.First(i => Properties[i].Source.Type == EmpirePropertyType.Civics);
-
-		//					//var toRemove = new List<EmpirePropertyViewModel>();
-
-		//					for (int i = first; i < RemainingIndexes.Count;)
-		//					{
-		//						var index = RemainingIndexes[i];
-		//						var civicVm = Properties[index];
-
-		//						if (civicVm.Source.Type == EmpirePropertyType.Civics)
-		//						{
-		//							var b = HasPotentMatches(civicVm);
-
-		//							if (!b)
-		//								RemoveProperty(i, civicVm.Weight);
-		//							else
-		//								i++;
-		//						}
-		//						else
-		//							break;
-		//					}
-		//				}
-		//				else if (CivicPointsAvailable == 0)
-		//					RemoveType(EmpirePropertyType.Civics);
-		//			}
-
-		//			private void RemoveEthics()
-		//			{
-		//				if (EthicPointsAvailable == 0)
-		//					RemoveType(EmpirePropertyType.Ethics);
-
-		//				//// Remove civics that are now impossible because of the first civic selection
-		//				//var first = RemainingIndexes.First(i => Properties[i].Source.Type == EmpirePropertyType.Ethics);
-
-		//				////var toRemove = new List<EmpirePropertyViewModel>();
-
-		//				//for (int i = first; i < RemainingIndexes.Count;)
-		//				//{
-		//				//	var index = RemainingIndexes[i];
-		//				//	var ethicVm = Properties[index];
-		//				//	var ethic = ethicVm.Source.AsEthic;
-
-		//				//	if (ethic != null)
-		//				//	{
-		//				//		//if (ethic.EthicCost > EthicPointsAvailable)
-
-		//				//		//var b = HasPotentMatches(ethic);
-
-		//				//		//if (!b)
-		//				//		//	RemoveProperty(i, ethic.Weight);
-		//				//		//else
-		//				//		//	i++;
-		//				//	}
-		//				//	else
-		//				//		break;
-		//				//}
-		//			}
-
-		//			private void RemoveOrigins()
-		//			{
-		//				RemoveType(EmpirePropertyType.Origin);
-		//			}
-
-		//			private IEnumerable<EmpirePropertyViewModel> ImpossibleProperties(EmpirePropertyViewModel Pick)
-		//			{
-		//				//var constraints = Pick.Source.Potential.SubConstraints.Concat(Pick.Source.Possible.SubConstraints).ToList();
-		//				//ICollection<EmpirePropertyViewModel> toRemove = new List<EmpirePropertyViewModel>();
-		//				//ICollection<EmpirePropertyViewModel> toRemove2 = new List<EmpirePropertyViewModel>();
-
-		//				//foreach (var prop in RemainingProperties.Where(p => p != Pick))
-		//				//{
-		//				//	foreach (var c in constraints)
-		//				//	{
-		//				//		if (c.Group != prop.Source.Type)
-		//				//			continue;
-
-		//				//		bool e = c.Evaluate(prop, (p1, p2) => p1.Identifier == p2.Source.Identifier);
-		//				//		if (!e)
-		//				//			toRemove.Add(prop);
-		//				//	}
-		//				//}
-
-		//				//var except = RemainingProperties.Except(toRemove);
-
-
-		//				//foreach(var pickType in RemainingProperties)
-
-		//				throw new NotImplementedException();
-		//			}
-
-		//			private void RemoveProperty(int Index)
-		//			{
-		//				int weight = Properties[Index].Weight;
-		//				RemoveProperty(Index, weight);
-		//			}
-		//			private void RemoveProperty(int Index, int Weight)
-		//			{
-		//#if DEBUG
-		//				Debug.WriteLine(Properties[RemainingIndexes[Index]]);
-		//#endif
-		//				RemainingIndexes.RemoveRange(Index, Weight);
-		//			}
-
-		//			public GeneratorNode Iterate()
-		//			{
-		//				// No further options, continue with parent node
-		//				if (RemainingIndexes.Count == 0)
-		//					return Parent;
-
-		//				// Pick randomly an property
-		//				int pickedIndex = Rnd.Next(RemainingIndexes.Count);
-		//				int pickedRemainingIndex = RemainingIndexes[pickedIndex];
-		//				CurrentPick = Properties[pickedRemainingIndex];
-
-		//				//RemainingIndexes.RemoveAt(pickedIndex);
-		//				pickedIndex = Properties.FindIndex(p => p.Source.Identifier == "ethic_fanatic_authoritarian");
-		//				CurrentPick = Properties.First(p => p.Source.Identifier == "ethic_fanatic_authoritarian");
-
-		//				RemoveProperty(pickedIndex, CurrentPick.Weight);
-
-		//				// Check if this item fits in the current selection
-		//				if (!CheckProperty(CurrentPick))
-		//					return this;
-
-
-
-
-		//				// Remove all same-items (if the picked property had a weight > 1)
-		//				//int weight;
-		//				//if ((weight = pickedProp.Weight) > 1)
-		//				//	RemainingIndexes.RemoveRange(pickedIndex + 1, weight - 1);
-
-		//				PickProperty(CurrentPick);
-
-		//				return new GeneratorNode(this, CurrentPick);
-
-		//				// Check if already picked items and newly picked one are compatible to each other
-
-		//				//var imp = ImpossibleProperties(pickedProp);
-		//				//switch
-
-		//				// Remove the index from the list
-
-
-
-		//				//RemainingProperties.
-
-		//				//return null;
-
-		//				throw new NotImplementedException();
-		//			}
-
-		//			public static GeneratorNode CreateRoot(IEnumerable<EmpirePropertyViewModel> Source)
-		//			{
-		//				GeneratorNode node = new GeneratorNode(Source);
-		//				return node;
-		//			}
+		//	return true;
 		//}
+
+
+
+		protected virtual bool IsValidWith(EmpireProperty Prop)
+		{
+			var propType = Prop.Type;
+			if (Constraints.IsAlwaysYes)
+				return true;
+			else if (Constraints.ConstraintGroups.TryGetValue(propType, out IEnumerable<ConstraintGroup> cgs))
+			{
+				int maxOfType = MaxByType(propType);
+
+				foreach (var cg in cgs)
+				{
+					bool isValid = cg.Validate(Prop);
+
+					if (cg.LogicGate == Condition.Or)
+					{
+						maxOfType -= cg.Properties.Min(p => p.Cost);
+
+						if (isValid)
+							return true;
+						else if (Prop.Cost > maxOfType)
+							return false;
+					}
+					else if ((cg.LogicGate == Condition.Nor) && (!isValid))
+						return false;
+				}
+			}
+
+			return true;
+		}
+
+		protected virtual bool IsValidWith(EmpireProperty Prop, GeneratorNode Node)
+		{
+			var propType = Prop.Type;
+			if (Constraints.IsAlwaysYes)
+				return true;
+			else if (Constraints.ConstraintGroups.TryGetValue(propType, out IEnumerable<ConstraintGroup> cgs))
+			{
+				int maxOfType = Node.AvailableByType(propType);
+				//if (Node.NonFulfilledRequiredConstraints.TryGetValue(this, out ICollection<ConstraintGroup> constraints))
+				//{
+
+				//}
+
+				foreach (var cg in cgs)
+				{
+					bool isValid = cg.Validate(Prop);
+
+					if (cg.LogicGate == Condition.Or)
+					{
+						maxOfType -= cg.Properties.Min(p => p.Cost);
+
+						if (isValid)
+							return true;
+						else if (Prop.Cost > maxOfType)
+							return false;
+					}
+					else if ((cg.LogicGate == Condition.Nor) && (!isValid))
+						return false;
+				}
+			}
+
+			return true;
+		}
+
+		protected virtual bool OnRemoving(GeneratorNode Node)
+		{
+			foreach (var solutionItem in Node.Solution)
+			{
+				if (!ValidateEachOther(this, solutionItem, Node))
+					return true;
+			}
+
+			return false;
+		}
+
+		//protected virtual bool ValidateTo(EmpireProperty Prop)
+		//{
+		//	var propType = Prop.Type;
+		//	if (Constraints.ConstraintGroups.TryGetValue(propType, out IEnumerable<ConstraintGroup> cgs))
+		//	{
+		//		int maxOfType = MaxByType(propType);
+
+		//		foreach (var cg in cgs)
+		//		{
+		//			bool isValid = cg.Validate(Prop);
+
+		//			if (cg.LogicGate == Condition.Or)
+		//			{
+		//				maxOfType--;
+
+		//				if (isValid)
+		//					return true;
+		//				else if (maxOfType == 0)
+		//					return false;
+		//			}
+		//			else if ((cg.LogicGate == Condition.Nor) && (!isValid))
+		//				return false;
+
+		//		}
+		//	}
+
+		//	return true;
+		//}
+
+		//protected virtual bool ValidateTo(EmpireProperty Prop, GeneratorNode Node)
+		//{
+		//	var propType = Prop.Type;
+		//	if (Constraints.ConstraintGroups.TryGetValue(propType, out IEnumerable<ConstraintGroup> cgs))
+		//	{
+		//		int maxOfType = Node.MaxByType(propType);
+
+		//		foreach (var cg in cgs)
+		//		{
+		//			bool isValid = cg.Validate(Prop);
+
+		//			if (cg.LogicGate == Condition.Or)
+		//			{
+		//				maxOfType--;
+
+		//				if (isValid)
+		//					return true;
+		//				else if (maxOfType == 0)
+		//					return false;
+		//			}
+		//			else if ((cg.LogicGate == Condition.Nor) && (!isValid))
+		//				return false;
+		//		}
+		//	}
+
+		//	return true;
+		//}
+		//protected virtual bool ValidateTo(EmpireProperty Prop, GeneratorNode Node)
+		//{
+		//	var propType = Prop.Type;
+		//	if (Constraints.ConstraintGroups.TryGetValue(propType, out IEnumerable<ConstraintGroup> cgs))
+		//	{
+		//		int maxOfType = Node.MaxByType(propType);
+
+		//		foreach (var cg in cgs)
+		//		{
+		//			bool isValid = cg.Validate(Prop);
+
+		//			if (cg.LogicGate == Condition.Or)
+		//			{
+		//				maxOfType -= cg.Properties.Min(p => p.Cost);
+
+		//				if (isValid)
+		//					return true;
+		//				else if (maxOfType == 0)
+		//					return false;
+		//			}
+		//			else if ((cg.LogicGate == Condition.Nor) && (!isValid))
+		//				return false;
+		//		}
+		//	}
+
+		//	return true;
+		//}
+		//protected virtual bool ValidateTo(EmpireProperty Prop, GeneratorNode Node)
+		//{
+		//	var propType = Prop.Type;
+		//	if (Constraints.ConstraintGroups.TryGetValue(propType, out IEnumerable<ConstraintGroup> cgs))
+		//	{
+		//		int maxOfType = Node.MaxByType(propType);
+
+		//		foreach (var cg in cgs)
+		//		{
+		//			bool isValid = cg.Validate(Prop);
+
+		//			if (cg.LogicGate == Condition.Or)
+		//			{
+		//				maxOfType -= cg.Properties.Min(p => p.Cost);
+
+		//				if (isValid)
+		//					return true;
+		//				else if (maxOfType == 0)
+		//					return false;
+		//			}
+		//			else if ((cg.LogicGate == Condition.Nor) && (!isValid))
+		//				return false;
+		//		}
+		//	}
+
+		//	return true;
+		//}
+
+		//protected virtual bool ValidateTo(IEnumerable<EmpireProperty> Properties, GeneratorNode Node)
+		//{
+		//	foreach (var prop in Properties)
+		//	{
+		//		if (!ValidateEachOther(this, prop, Node))
+		//			return false;
+		//	}
+
+		//	return true;
+		//}
+
+		//protected virtual bool ValidateTo(IEnumerable<EmpireProperty> Properties)
+		//{
+		//	foreach (var prop in Properties)
+		//	{
+		//		if (!ValidateEachOther(this, prop))
+		//			return false;
+		//	}
+
+		//	return true;
+		//}
+
+		//protected static bool ValidateEachOther(EmpireProperty Prop1, EmpireProperty Prop2)
+		//{
+		//	if (!Prop1.ValidateTo(Prop2))
+		//		return false;
+
+		//	if (!Prop2.ValidateTo(Prop1))
+		//		return false;
+
+		//	return true;
+		//}
+
+		protected static bool ValidateEachOther(EmpireProperty Prop1, EmpireProperty Prop2)
+		{
+			if (!Prop1.IsValidWith(Prop2))
+				return false;
+
+			if (!Prop2.IsValidWith(Prop1))
+				return false;
+
+			return true;
+		}
+		protected static bool ValidateEachOther(EmpireProperty Prop1, EmpireProperty Prop2, GeneratorNode Node)
+		{
+			if (!Prop1.IsValidWith(Prop2, Node))
+				return false;
+
+			if (!Prop2.IsValidWith(Prop1, Node))
+				return false;
+
+			return true;
+		}
+
+		public static int MaxByType(EmpirePropertyType Type)
+		{
+			switch (Type)
+			{
+				case EmpirePropertyType.Authority:
+					return MaxAuthorities;
+				case EmpirePropertyType.Civics:
+					return MaxCivics;
+				case EmpirePropertyType.Ethics:
+					return MaxEthics;
+				case EmpirePropertyType.Origin:
+					return MaxOrigins;
+				case EmpirePropertyType.Species:
+					return MaxSpecies;
+				case EmpirePropertyType.Trait:
+					return MaxTraits;
+				default:
+					return int.MinValue;
+			}
+		}
+
+		protected class GeneratorNode
+		{
+			private static Random CreateRnd()
+			{
+				int tc = Environment.TickCount;
+
+				Debug.WriteLine(tc);
+
+				return new Random(tc);
+			}
+			public static readonly Random Rnd = CreateRnd();
+
+			private GeneratorNode(IEnumerable<EmpireProperty> Properties)
+			{
+				Parent = null;
+				Solution = new HashSet<EmpireProperty>();
+				RemainingProperties = new HashSet<EmpireProperty>(Properties.OrderBy(p => $"{p.Type}_{p.Identifier}"));
+				WeightSum = RemainingProperties.Sum(p => p.Weight);
+				RemoveSet = new HashSet<EmpireProperty>();
+			}
+
+			private GeneratorNode(GeneratorNode Parent)
+			{
+				this.Parent = Parent;
+				HasAuthority = Parent.HasAuthority;
+				CivicPointsAvailable = Parent.CivicPointsAvailable;
+				EthicPointsAvailable = Parent.EthicPointsAvailable;
+				HasOrigin = Parent.HasOrigin;
+				HasSpecies = Parent.HasSpecies;
+				TraitPointsAvailable = Parent.TraitPointsAvailable;
+				TraitPointsBalance = Parent.TraitPointsBalance;
+				HasTraits = Parent.HasTraits;
+
+				MaxTraits = Parent.MaxTraits;
+
+
+				Solution = new HashSet<EmpireProperty>(Parent.Solution);
+				RemainingProperties = new HashSet<EmpireProperty>(Parent.RemainingProperties);
+				NextIterationRule = Parent.NextIterationRule;
+				WeightSum = Parent.WeightSum;
+				NonFulfilledRequiredConstraints = new Dictionary<EmpireProperty, ICollection<ConstraintGroup>>(Parent.NonFulfilledRequiredConstraints);
+				RemoveSet = Parent.RemoveSet;
+			}
+
+			public GeneratorNode Parent { get; private set; }
+
+			public bool IsSolution { get => HasAuthority && HasCivics && HasEthics && HasOrigin && HasSpecies && HasTraits; }
+
+			public int MaxTraits { get; set; } = -1;
+			public int TraitPointsBalance { get; set; } = 0;
+
+			public int AvailableByType(EmpirePropertyType Type)
+			{
+				switch (Type)
+				{
+					case EmpirePropertyType.Authority:
+						return HasAuthority ? 0 : MaxByType(Type);
+					case EmpirePropertyType.Civics:
+						return CivicPointsAvailable;
+					case EmpirePropertyType.Ethics:
+						return EthicPointsAvailable;
+					case EmpirePropertyType.Origin:
+						return HasOrigin ? 0 : MaxByType(Type);
+					case EmpirePropertyType.Species:
+						return HasSpecies ? 0 : MaxByType(Type);
+					case EmpirePropertyType.Trait:
+						return TraitPointsAvailable;
+					default:
+						return int.MinValue;
+				}
+			}
+			public int MaxByType(EmpirePropertyType Type)
+			{
+				switch (Type)
+				{
+					case EmpirePropertyType.Trait:
+						return MaxTraits;
+					default:
+						return EmpireProperty.MaxByType(Type);
+				}
+			}
+
+			public bool HasAuthority { get; set; } = false;
+
+			public int CivicPointsAvailable { get; set; } = EmpireProperty.MaxByType(EmpirePropertyType.Civics);
+			public bool HasCivics => CivicPointsAvailable == 0;
+
+			public int EthicPointsAvailable { get; set; } = EmpireProperty.MaxByType(EmpirePropertyType.Ethics);
+			public bool HasEthics => EthicPointsAvailable == 0;
+			public bool HasOrigin { get; set; } = false;
+			public bool HasSpecies { get; set; } = false;
+
+			public int TraitPointsAvailable { get; set; } = -1;
+			public bool HasTraits { get; set; } = false;
+			public bool AreTraitsValid => (TraitPointsAvailable >= 0) && (TraitPointsBalance == 0);
+
+			public ICollection<EmpireProperty> Solution { get; private set; }
+
+			public HashSet<EmpireProperty> RemainingProperties { get; private set; }
+
+			//public IDictionary<EmpirePropertyType, ICollection<ConstraintGroup>> NonFulfilledRequiredConstraints { get; } = new Dictionary<EmpirePropertyType, ICollection<ConstraintGroup>>();
+
+			public IDictionary<EmpireProperty, ICollection<ConstraintGroup>> NonFulfilledRequiredConstraints { get; } = new Dictionary<EmpireProperty, ICollection<ConstraintGroup>>();
+
+			//public EmpireProperty CurrentPick { get; private set; } = null;
+
+			public int WeightSum { get; private set; }
+
+			public HashSet<EmpireProperty> RemoveSet { get; private set; }
+			public Func<EmpireProperty, bool> NextIterationRule { get; set; } = null;
+
+			protected void RemoveImpossibleProperties()
+			{
+				foreach (var prop in RemainingProperties)
+				{
+					if (prop.OnRemoving(this))
+						RemoveSet.Add(prop);
+				}
+
+				Queue<EmpireProperty> removeQ = new Queue<EmpireProperty>(RemoveSet);
+
+				while (removeQ.Count > 0)
+				{
+					var next = removeQ.Dequeue();
+
+					var depProps = next.RequiredBy(RemainingProperties);
+
+					foreach (var depProp in depProps)
+					{
+						if (!RemoveSet.Contains(depProp))
+						{
+							RemoveSet.Add(depProp);
+							removeQ.Enqueue(depProp);
+						}
+					}
+				}
+
+				foreach (var rem in RemoveSet)
+					Remove(rem);
+
+				RemoveSet.Clear();
+			}
+
+
+
+			private void Remove(EmpireProperty Prop)
+			{
+				RemainingProperties.Remove(Prop);
+
+				if ((CurrentSubset != null) && (CurrentSubset != RemainingProperties))
+					CurrentSubset.Remove(Prop);
+
+				WeightSum -= Prop.Weight;
+			}
+
+			private EmpireProperty Pick(IEnumerable<EmpireProperty> Source)
+			{
+				EmpireProperty pick = null;
+
+				int weight = (RemainingProperties == Source)
+					? WeightSum
+					: Source.Sum(p => p.Weight);
+				int next = Rnd.Next(weight);
+				int sum = 0;
+
+				foreach (var remain in Source)
+				{
+					int curWeight = remain.Weight;
+					sum += curWeight;
+
+					if (next < sum)
+					{
+						pick = remain;
+						break;
+					}
+				}
+
+				return pick;
+			}
+
+			private HashSet<EmpireProperty> CurrentSubset { get; set; } = null;
+
+			public GeneratorNode Next()
+			{
+				CurrentSubset = NextIterationRule == null
+					? RemainingProperties
+					: RemainingProperties.Where(NextIterationRule).ToHashSet();
+
+				NextIterationRule = null;
+
+				while (CurrentSubset.Count > 0)
+				{
+					EmpireProperty pick = Pick(CurrentSubset);
+
+					// COMMENT OUT FOLLOWING LINE
+					//if (!Solution.Any())
+					//	pick = RemainingProperties.First(p => p.Identifier == "civic_inwards_perfection");
+					//else if (Solution.Count == 1 && RemainingProperties.Any(p => p.Identifier == "ethic_fanatic_xenophobe"))
+					//	pick = RemainingProperties.First(p => p.Identifier == "ethic_fanatic_xenophobe");
+
+					Queue<EmpireProperty> addQ = new Queue<EmpireProperty>();
+					addQ.Enqueue(pick);
+
+					do
+					{
+						EmpireProperty next = addQ.Dequeue();
+
+						if (next.OnAdding(next, this))
+						{
+							Solution.Add(next);
+							next.OnAdded(this);
+							Remove(pick);
+
+							var dependentProperties = next.DependentProperties();
+							foreach (var dependent in dependentProperties)
+							{
+								if (!Solution.Contains(dependent))
+								{
+									if (RemainingProperties.Contains(dependent))
+										addQ.Enqueue(dependent);
+									else
+										return Parent;
+								}
+							}
+						}
+						else
+							return Parent;
+
+
+					} while (addQ.Count > 0);
+
+					RemoveImpossibleProperties();
+
+					GeneratorNode nextNode = new GeneratorNode(this);
+					return nextNode;
+				}
+
+				return Parent;
+			}
+
+			public static GeneratorNode CreateRoot(IEnumerable<EmpireProperty> Properties)
+			{
+				return new GeneratorNode(Properties);
+			}
+		}
 
 		#endregion
 	}

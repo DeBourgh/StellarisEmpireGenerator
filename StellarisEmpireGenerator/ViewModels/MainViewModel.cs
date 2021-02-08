@@ -80,7 +80,10 @@ namespace StellarisEmpireGenerator.ViewModels
 					if (properties != null)
 						return properties;
 				}
-				catch { }
+				catch (Exception e)
+				{
+					string trace = e.StackTrace;
+				}
 
 				// File seems to be corrupt, so delete it
 				File.Delete(_modelFileName);
@@ -230,6 +233,8 @@ namespace StellarisEmpireGenerator.ViewModels
 		public ObservableCollection<EmpirePropertyViewModel> Traits { get; } = new ObservableCollection<EmpirePropertyViewModel>();
 		public ObservableCollection<EmpirePropertyViewModel> Species { get; } = new ObservableCollection<EmpirePropertyViewModel>();
 
+		public ObservableCollection<EmpireViewModel> Empires { get; } = new ObservableCollection<EmpireViewModel>();
+
 		private ICommand _reloadCommand;
 		public ICommand ReloadCommand
 		{
@@ -366,7 +371,7 @@ namespace StellarisEmpireGenerator.ViewModels
 			Traits.Clear();
 			Species.Clear();
 
-			foreach (var prop in Properties)
+			foreach (var prop in Properties.OrderBy(p => $"{p.Type}_{p.Identifier}"))
 			{
 				var epvm = new EmpirePropertyViewModel(prop);
 
@@ -394,13 +399,15 @@ namespace StellarisEmpireGenerator.ViewModels
 			}
 		}
 
-
 		private void ApplyLanguageDictionary(IDictionary<string, string> Dict)
 		{
 			if (Dict == null)
 			{
 				foreach (var propVm in CollectAllPropertyViewModels())
 					propVm.Name = propVm.Source.Identifier;
+
+				foreach (var empireVm in Empires)
+					empireVm.ApplyLanguageDict(null);
 
 				return;
 			}
@@ -409,8 +416,15 @@ namespace StellarisEmpireGenerator.ViewModels
 			LocalizationKeyLangDict = ActiveLocalizationKey;
 
 			foreach (var propVm in CollectAllPropertyViewModels())
-				propVm.Name = LangDict[propVm.Source.Identifier] ?? propVm.Source.Identifier;
+			{
+				if (LangDict.TryGetValue(propVm.Source.Identifier, out string value))
+					propVm.Name = value;
+				else
+					propVm.Name = propVm.Source.Identifier;
+			}
 
+			foreach (var empireVm in Empires)
+				empireVm.ApplyLanguageDict(LangDict);
 		}
 		private IDictionary<string, string> LanguageDictionaryFromGameFiles(bool SerializeLocallyOnLoad = true)
 		{
@@ -472,25 +486,25 @@ namespace StellarisEmpireGenerator.ViewModels
 		{
 			var props = GetWeightedPropertyViewModels().ToList();
 
-			try
-			{
-				var generatedEmpires = new List<EmpirePropertyViewModel>();
-				for (int i = 0; i < Count; i++)
-				{
-					GeneratorNode next = GeneratorNode.CreateRoot(props);
-					while (true)
-					{
-						var node = next.Iterate();
+			var empires = EmpireProperty.GenerateSolution(props.Select(p => p.Source), GenerateCount);
 
-						if (node == null)
-							break;
-					}
-				}
-			}
-			catch (Exception e)
+			Empires.Clear();
+
+			foreach (var empire in empires)
 			{
-				;
+				EmpireViewModel empireVm = new EmpireViewModel(
+					empire.First(e => e.Type == EmpirePropertyType.Authority),
+					empire.Where(e => e.Type == EmpirePropertyType.Civics),
+					empire.Where(e => e.Type == EmpirePropertyType.Ethics),
+					empire.First(e => e.Type == EmpirePropertyType.Origin),
+					empire.First(e => e.Type == EmpirePropertyType.Species),
+					empire.Where(e => e.Type == EmpirePropertyType.Trait)
+				);
+
+				empireVm.ApplyLanguageDict(LangDict);
+				Empires.Add(empireVm);
 			}
+
 		}
 
 		#endregion
@@ -552,456 +566,5 @@ namespace StellarisEmpireGenerator.ViewModels
 		}
 
 		#endregion
-
-		public class GeneratorNode
-		{
-			private static readonly Random Rnd = new Random(Environment.TickCount);
-
-			private GeneratorNode(IEnumerable<EmpirePropertyViewModel> WeightedSource)
-			{
-				Solution = new List<EmpirePropertyViewModel>();
-				Properties = WeightedSource.OrderBy(p => $"{p.Source.Type}_{p.Source.Identifier}").ToList();
-				RemainingIndexes = Enumerable.Range(0, WeightedSource.Count()).ToList();
-			}
-
-			private GeneratorNode(GeneratorNode Parent, EmpirePropertyViewModel PickedProperty)
-			{
-				this.Parent = Parent;
-
-				Solution = new List<EmpirePropertyViewModel>(Parent.Solution)
-				{
-					PickedProperty
-				};
-
-				Properties = Parent.Properties;
-				RemainingIndexes = new List<int>(Parent.RemainingIndexes);
-
-				HasAuthority = Parent.HasAuthority;
-				CivicPointsAvailable = Parent.CivicPointsAvailable;
-				EthicPointsAvailable = Parent.EthicPointsAvailable;
-				HasOrigin = Parent.HasOrigin;
-				HasSpecies = Parent.HasSpecies;
-				TraitPointsAvailable = Parent.TraitPointsAvailable;
-			}
-
-			public GeneratorNode Parent { get; private set; }
-
-			public bool IsSolution { get => HasAuthority && HasCivics && HasEthics && HasOrigin && HasSpecies && HasTraits; }
-
-			private bool HasAuthority { get; set; }
-
-			private int CivicPointsAvailable { get; set; } = 2;
-			private bool HasCivics { get => CivicPointsAvailable == 0; }
-
-			private int EthicPointsAvailable { get; set; } = 3;
-			private bool HasEthics { get => EthicPointsAvailable == 0; }
-			private bool HasOrigin { get; set; }
-			private bool HasSpecies { get; set; }
-
-			private int TraitPointsAvailable { get; set; } = -1;
-			private bool HasTraits { get => TraitPointsAvailable == 0; }
-
-			//private int CivicsCount { get; private set; }
-			public ObservableCollection<EmpireViewModel> Empires { get; } = new ObservableCollection<EmpireViewModel>();
-
-			public ICollection<EmpirePropertyViewModel> Solution { get; }
-
-			public List<EmpirePropertyViewModel> Properties { get; private set; }
-
-			private EmpirePropertyViewModel CurrentPick { get; set; }
-
-			public List<EmpirePropertyViewModel> RemainingProperties { get { return RemainingIndexes.Select(i => Properties[i]).ToList(); } }
-
-			//public Dictionary<int, EmpirePropertyViewModel> g;
-
-			public List<int> RemainingIndexes { get; }
-
-			//public IList<int> AttemptedPicks { get; }
-
-			//private bool HasPotentMatches()
-			//{
-			//	return false;
-			//}
-			private bool HasPotentMatches(EmpirePropertyViewModel ToMatch)
-			{
-				var toMatch = ToMatch.Source;
-				var types = toMatch.Constraints.SubConstraints.Select(c => c.Group).Where(t => t != EmpirePropertyType.Unknown).ToList();
-				int typesCount = types.Count;
-				int remainingCount = RemainingIndexes.Count;
-
-				bool typeMatchFound = false;
-				bool eachTypeMatchFound = true;
-
-				var currentTypeIndex = 0;
-				bool isComparing = false;
-				int i = 0;
-				while ((currentTypeIndex < typesCount) && (i < remainingCount))
-				{
-					var prop = Properties[RemainingIndexes[i]];
-					var type = types[currentTypeIndex];
-
-					int cmp;
-
-					if ((cmp = prop.Source.Type.CompareTo(type)) == 0)
-					{
-						i++;
-
-						if (typeMatchFound)
-							continue;
-
-						isComparing = true;
-
-						bool e = Matches(ToMatch, prop);
-						typeMatchFound |= e;
-					}
-					else
-					{
-						if (cmp < 0)
-							i++;
-						else
-							currentTypeIndex++;
-
-						if (isComparing)
-						{
-							eachTypeMatchFound &= typeMatchFound;
-							typeMatchFound = false;
-
-							isComparing = false;
-
-							continue;
-						}
-					}
-				}
-
-				return eachTypeMatchFound;
-			}
-
-			private bool Matches(EmpirePropertyViewModel ToMatch, EmpirePropertyViewModel Matching)
-			{
-				var toMatch = ToMatch.Source;
-				var matching = Matching.Source;
-
-				foreach (var cons in toMatch.Constraints.SubConstraints)
-				{
-					if (matching.Type != cons.Group)
-						continue;
-					else
-					{
-						bool e = cons.Evaluate(matching, (p1, p2) => p1.Identifier == p2.Identifier);
-						if (e)
-							return true;
-					}
-				}
-
-				//foreach (var cons in prop2.Constraints.SubConstraints)
-				//{
-				//	if (prop1.Type != cons.Group)
-				//		continue;
-				//	else
-				//	{
-				//		bool e = cons.Evaluate(prop1, (p1, p2) => p1.Identifier == p2.Identifier);
-				//		if (e)
-				//			return true;
-				//	}
-				//}
-
-				return false;
-			}
-			private bool CheckProperties(EmpirePropertyViewModel Property1, EmpirePropertyViewModel Property2)
-			{
-				var prop1 = Property1.Source;
-				var prop2 = Property2.Source;
-
-				foreach (var cons in prop1.Constraints.SubConstraints)
-				{
-					if (prop2.Type != cons.Group)
-						continue;
-					else
-					{
-						bool e = cons.Evaluate(prop2, (p1, p2) => p1.Identifier == p2.Identifier);
-						if (!e)
-							return false;
-					}
-				}
-
-				foreach (var cons in prop2.Constraints.SubConstraints)
-				{
-					if (prop1.Type != cons.Group)
-						continue;
-					else
-					{
-						bool e = cons.Evaluate(prop1, (p1, p2) => p1.Identifier == p2.Identifier);
-						if (!e)
-							return false;
-					}
-				}
-
-				return true;
-			}
-			private bool CheckProperty(EmpirePropertyViewModel Property)
-			{
-				var prop = Property.Source;
-
-				foreach (var sol in Solution)
-				{
-					if (!CheckProperties(Property, sol))
-						return false;
-				}
-
-				switch (prop.Type)
-				{
-					case EmpirePropertyType.Authority:
-						break;
-					case EmpirePropertyType.Civics:
-						//if (CivicPointsAvailable == 0)
-						//	return false;
-						break;
-					case EmpirePropertyType.Ethics:
-						if (Property.Source.AsEthic.EthicCost > EthicPointsAvailable)
-							return false;
-						break;
-					case EmpirePropertyType.Origin:
-						break;
-					case EmpirePropertyType.Species:
-						break;
-					case EmpirePropertyType.Trait:
-						break;
-				}
-
-				return true;
-			}
-
-			private void PickProperty(EmpirePropertyViewModel Property)
-			{
-				for (int i = 0; i < RemainingIndexes.Count;)
-				{
-					var index = RemainingIndexes[i];
-					var prop = Properties[index];
-
-					if (!CheckProperties(Property, prop))
-						RemoveProperty(i, prop.Weight);
-					else
-						i++;
-				}
-
-				switch (Property.Source.Type)
-				{
-					case EmpirePropertyType.Authority:
-						PickAuthority();
-						break;
-					case EmpirePropertyType.Civics:
-						PickCivic();
-						break;
-					case EmpirePropertyType.Ethics:
-						PickEthic();
-						break;
-					case EmpirePropertyType.Origin:
-						HasOrigin = true;
-						RemoveOrigins();
-						break;
-					case EmpirePropertyType.Species:
-						break;
-					case EmpirePropertyType.Trait:
-						break;
-				}
-			}
-
-			private void PickAuthority()
-			{
-				HasAuthority = true;
-				RemoveAuthorities();
-			}
-			private void PickCivic()
-			{
-				CivicPointsAvailable--;
-				RemoveCivics();
-			}
-			private void PickEthic()
-			{
-				EthicPointsAvailable -= CurrentPick.Source.AsEthic.EthicCost;
-				RemoveEthics();
-			}
-
-			private void RemoveType(EmpirePropertyType Type)
-			{
-				var first = RemainingIndexes.First(i => Properties[i].Source.Type == Type);
-				for (int i = first; i < RemainingIndexes.Count;)
-				{
-					var index = RemainingIndexes[i];
-					var prop = Properties[index].Source;
-
-					if (prop.Type == Type)
-						RemoveProperty(i, prop.Weight);
-					else
-						break;
-				}
-			}
-			private void RemoveAuthorities()
-			{
-				RemoveType(EmpirePropertyType.Authority);
-			}
-			private void RemoveCivics()
-			{
-				if (CivicPointsAvailable == 1)
-				{
-					// Remove civics that are now impossible because of the first civic selection
-					var first = RemainingIndexes.First(i => Properties[i].Source.Type == EmpirePropertyType.Civics);
-
-					//var toRemove = new List<EmpirePropertyViewModel>();
-
-					for (int i = first; i < RemainingIndexes.Count;)
-					{
-						var index = RemainingIndexes[i];
-						var civicVm = Properties[index];
-
-						if (civicVm.Source.Type == EmpirePropertyType.Civics)
-						{
-							var b = HasPotentMatches(civicVm);
-
-							if (!b)
-								RemoveProperty(i, civicVm.Weight);
-							else
-								i++;
-						}
-						else
-							break;
-					}
-				}
-				else if (CivicPointsAvailable == 0)
-					RemoveType(EmpirePropertyType.Civics);
-			}
-
-			private void RemoveEthics()
-			{
-				if (EthicPointsAvailable == 0)
-					RemoveType(EmpirePropertyType.Ethics);
-
-				//// Remove civics that are now impossible because of the first civic selection
-				//var first = RemainingIndexes.First(i => Properties[i].Source.Type == EmpirePropertyType.Ethics);
-
-				////var toRemove = new List<EmpirePropertyViewModel>();
-
-				//for (int i = first; i < RemainingIndexes.Count;)
-				//{
-				//	var index = RemainingIndexes[i];
-				//	var ethicVm = Properties[index];
-				//	var ethic = ethicVm.Source.AsEthic;
-
-				//	if (ethic != null)
-				//	{
-				//		//if (ethic.EthicCost > EthicPointsAvailable)
-
-				//		//var b = HasPotentMatches(ethic);
-
-				//		//if (!b)
-				//		//	RemoveProperty(i, ethic.Weight);
-				//		//else
-				//		//	i++;
-				//	}
-				//	else
-				//		break;
-				//}
-			}
-
-			private void RemoveOrigins()
-			{
-				RemoveType(EmpirePropertyType.Origin);
-			}
-
-			private IEnumerable<EmpirePropertyViewModel> ImpossibleProperties(EmpirePropertyViewModel Pick)
-			{
-				//var constraints = Pick.Source.Potential.SubConstraints.Concat(Pick.Source.Possible.SubConstraints).ToList();
-				//ICollection<EmpirePropertyViewModel> toRemove = new List<EmpirePropertyViewModel>();
-				//ICollection<EmpirePropertyViewModel> toRemove2 = new List<EmpirePropertyViewModel>();
-
-				//foreach (var prop in RemainingProperties.Where(p => p != Pick))
-				//{
-				//	foreach (var c in constraints)
-				//	{
-				//		if (c.Group != prop.Source.Type)
-				//			continue;
-
-				//		bool e = c.Evaluate(prop, (p1, p2) => p1.Identifier == p2.Source.Identifier);
-				//		if (!e)
-				//			toRemove.Add(prop);
-				//	}
-				//}
-
-				//var except = RemainingProperties.Except(toRemove);
-
-
-				//foreach(var pickType in RemainingProperties)
-
-				throw new NotImplementedException();
-			}
-
-			private void RemoveProperty(int Index)
-			{
-				int weight = Properties[Index].Weight;
-				RemoveProperty(Index, weight);
-			}
-			private void RemoveProperty(int Index, int Weight)
-			{
-#if DEBUG
-				Debug.WriteLine(Properties[RemainingIndexes[Index]]);
-#endif
-				RemainingIndexes.RemoveRange(Index, Weight);
-			}
-
-			public GeneratorNode Iterate()
-			{
-				// No further options, continue with parent node
-				if (RemainingIndexes.Count == 0)
-					return Parent;
-
-				// Pick randomly an property
-				int pickedIndex = Rnd.Next(RemainingIndexes.Count);
-				int pickedRemainingIndex = RemainingIndexes[pickedIndex];
-				CurrentPick = Properties[pickedRemainingIndex];
-
-				//RemainingIndexes.RemoveAt(pickedIndex);
-				pickedIndex = Properties.FindIndex(p => p.Source.Identifier == "ethic_fanatic_authoritarian");
-				CurrentPick = Properties.First(p => p.Source.Identifier == "ethic_fanatic_authoritarian");
-
-				RemoveProperty(pickedIndex, CurrentPick.Weight);
-
-				// Check if this item fits in the current selection
-				if (!CheckProperty(CurrentPick))
-					return this;
-
-
-
-
-				// Remove all same-items (if the picked property had a weight > 1)
-				//int weight;
-				//if ((weight = pickedProp.Weight) > 1)
-				//	RemainingIndexes.RemoveRange(pickedIndex + 1, weight - 1);
-
-				PickProperty(CurrentPick);
-
-				return new GeneratorNode(this, CurrentPick);
-
-				// Check if already picked items and newly picked one are compatible to each other
-
-				//var imp = ImpossibleProperties(pickedProp);
-				//switch
-
-				// Remove the index from the list
-
-
-
-				//RemainingProperties.
-
-				//return null;
-
-				throw new NotImplementedException();
-			}
-
-			public static GeneratorNode CreateRoot(IEnumerable<EmpirePropertyViewModel> Source)
-			{
-				GeneratorNode node = new GeneratorNode(Source);
-				return node;
-			}
-		}
 	}
 }

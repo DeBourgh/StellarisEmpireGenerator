@@ -5,7 +5,6 @@ using StellarisEmpireGenerator.Core.ObjectModel;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 
 namespace StellarisEmpireGenerator.Core.EmpireProperties
 {
@@ -16,15 +15,13 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 
 		private EmpirePropertyTrait(Entity SourceEntity) : base(SourceEntity, EmpirePropertyType.Trait)
 		{
-			TraitCost = ExtractTraitCost(SourceEntity);
+			Cost = ExtractTraitCost(SourceEntity);
 		}
 
 		private IEnumerable<EmpireProperty> TraitAllowedSpecies { get; set; } = null;
 		private IEnumerable<EmpireProperty> TraitOpposites { get; set; } = null;
 
-		public int TraitCost { get; set; } = default;
-
-		private static bool IsTrait(Entity Node)
+		private static bool IsNodeTrait(Entity Node)
 		{
 			return
 				Node.Key.StartsWith("trait_") &&
@@ -74,64 +71,93 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 
 		#endregion
 
+		//protected override bool OnAdd(GeneratorNode Node)
+		//{
+		//	//if (Node.TraitPointsAvailable == 1 && Node.SumTraitPoints == 0)
+		//	//	return false;
+
+		//	return base.OnAdd(Node);
+		//}
+
+		protected override bool OnAdding(EmpireProperty Pick, GeneratorNode Node)
+		{
+			if (Type == EmpirePropertyType.Trait)
+			{
+				if (Node.HasTraits)
+					return false;
+				else if (Node.TraitPointsAvailable == 1)
+					return Node.TraitPointsBalance - Cost == 0;
+			}
+
+			return base.OnAdding(Pick, Node);
+		}
+
+		protected override void OnAdded(GeneratorNode Node)
+		{
+			if (!Node.HasSpecies)
+			{
+				Node.NextIterationRule = (p => p.Type == EmpirePropertyType.Species);
+			}
+			else
+			{
+				Node.TraitPointsAvailable--;
+				Node.TraitPointsBalance -= Cost;
+
+				//if (Node.TraitPointsAvailable == 0 && !Node.AreTraitsValid)
+				//	Node.NextIterationRule = (p => false);
+				//else
+				//{
+				if (Node.TraitPointsBalance == 0)
+				{
+					if (Node.TraitPointsAvailable <= 1)
+						Node.HasTraits = true;
+					else
+					{
+						bool more = Convert.ToBoolean(GeneratorNode.Rnd.Next(2));
+						if (!more)
+							Node.HasTraits = true;
+					}
+				}
+
+				if (!Node.HasTraits)
+					Node.NextIterationRule = (p => p.Type == EmpirePropertyType.Trait);
+				//}
+			}
+
+			base.OnAdded(Node);
+		}
+
+		protected override bool IsValidWith(EmpireProperty Prop, GeneratorNode Node)
+		{
+
+			//if ( && (Prop.Type == EmpirePropertyType.Trait))
+			//	return false;
+
+			return base.IsValidWith(Prop, Node);
+		}
+
 		internal static EmpirePropertyTrait TraitFromNode(Entity Node)
 		{
-			if (IsTrait(Node))
+			if (IsNodeTrait(Node))
 				return new EmpirePropertyTrait(Node);
 			else
 				return null;
 		}
 
-		protected override void UpdateRelationsToOtherEmpireProperties(IEnumerable<EmpireProperty> Properties)
+		protected override Constraint ExtractConstraint(IEnumerable<EmpireProperty> Properties)
 		{
-			// Extract trait opposites
-			//foreach (var prop in Properties)
-			//{
-			//	EmpirePropertyTrait trait = prop.AsTrait;
-			//	if (trait == null)
-			//		continue;
-
-			//	trait.TraitOpposites = ExtractTraitOpposites(trait.SourceEntity, Properties);
-			//	trait.TraitAllowedSpecies = ExtractTraitAllowedArchetypes(trait.SourceEntity, Properties);
-			//}
+			Constraint constraint = base.ExtractConstraint(Properties);
 
 			TraitOpposites = ExtractTraitOpposites(SourceEntity, Properties);
 			TraitAllowedSpecies = ExtractTraitAllowedArchetypes(SourceEntity, Properties);
 
-			foreach (var opp in TraitOpposites)
-				AddConstraint(Condition.Nor, opp);
+			if (!TraitAllowedSpecies.Any(p => Properties.Contains(p)))
+				return null;
 
-			foreach (var allowedSp in TraitAllowedSpecies)
-				AddConstraint(Condition.Or, allowedSp);
-			//if (TraitOpposites != null && TraitOpposites.Count() > 0)
-			//{
-			//	Constraint<EmpireProperty> constraintTrait = new Constraint<EmpireProperty>(Condition.Each)
-			//	{
-			//		Group = EmpirePropertyType.Trait
-			//	};
+			constraint.Add(Condition.Nor, EmpirePropertyType.Trait, TraitOpposites);
+			constraint.Add(Condition.Or, EmpirePropertyType.Species, TraitAllowedSpecies);
 
-			//	Constraint<EmpireProperty> constraintTraitNor = new Constraint<EmpireProperty>(Condition.Nor);
-			//	foreach (var opp in TraitOpposites)
-			//		constraintTraitNor.Objects.Add(opp);
-
-			//	constraintTrait.SubConstraints.Add(constraintTraitNor);
-			//	Possible.SubConstraints.Add(constraintTrait);
-			//}
-
-			//if (TraitAllowedSpecies != null && TraitAllowedSpecies.Count() > 0)
-			//{
-			//	Constraint<EmpireProperty> constraintSpec = new Constraint<EmpireProperty>(Condition.Each)
-			//	{
-			//		Group = EmpirePropertyType.Species
-			//	};
-
-			//	Constraint<EmpireProperty> constraintSpecOr = new Constraint<EmpireProperty>(Condition.Or);
-			//	foreach (var spec in TraitAllowedSpecies)
-			//		constraintSpecOr.Objects.Add(spec);
-
-			//	constraintSpec.SubConstraints.Add(constraintSpecOr);
-			//	Possible.SubConstraints.Add(constraintSpec);
-			//}
+			return constraint;
 		}
 	}
 }

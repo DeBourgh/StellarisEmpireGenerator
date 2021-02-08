@@ -1,117 +1,152 @@
 ﻿using Newtonsoft.Json;
 
+using StellarisEmpireGenerator.Core.ObjectModel;
+
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
 
 namespace StellarisEmpireGenerator.Core.EmpireProperties
 {
-	[JsonObject(IsReference = true)]
-	public class Constraint<T>
+	public class Constraint
 	{
-		public Constraint(Condition LogicGate)
+		protected static readonly string[] EmpirePropertyTypesAsString = Enum.GetNames(typeof(EmpirePropertyType)).Select(e => e.ToLower()).ToArray();
+
+		public Constraint() { }
+
+		public Dictionary<EmpirePropertyType, IEnumerable<ConstraintGroup>> ConstraintGroups { get; } = new Dictionary<EmpirePropertyType, IEnumerable<ConstraintGroup>>();
+
+		public bool? Always { get; set; } = null;
+
+		public bool IsAlwaysYes => !ConstraintGroups.Any() && Always.HasValue && Always.Value;
+
+		//public bool IsValid(EmpireProperty Prop)
+		//{
+		//	if (ConstraintGroups.TryGetValue(Prop.Type, out IEnumerable<ConstraintGroup> cgs))
+		//	{
+		//		foreach(var cg in cgs)
+		//		{
+
+		//		}
+		//	}
+
+		//	return true;
+		//}
+
+
+		public void Add(Condition Cond, EmpirePropertyType Type, IEnumerable<EmpireProperty> Properties)
 		{
-			this.LogicGate = LogicGate;
+			if (Cond == Condition.Not)
+				Cond = Condition.Nor;
+
+			if (Cond == Condition.Required)
+			{
+				foreach (var prop in Properties)
+					Add(Condition.Or, Type, prop.Yield());
+
+				return;
+			}
+
+			if (!ConstraintGroups.TryGetValue(Type, out IEnumerable<ConstraintGroup> logicGroups))
+			{
+				logicGroups = new HashSet<ConstraintGroup>();
+				ConstraintGroups[Type] = logicGroups;
+			}
+
+			ConstraintGroup first;
+			if (((first = logicGroups.FirstOrDefault(p => p.LogicGate == Cond)) == null) || (Cond == Condition.Or))
+			{
+				var cg = new ConstraintGroup(Type)
+				{
+					LogicGate = Cond
+				};
+
+				foreach (var prop in Properties)
+					cg.Properties.Add(prop);
+
+				(logicGroups as ICollection<ConstraintGroup>).Add(cg);
+			}
+			else
+			{
+				foreach (var prop in Properties)
+					first.Properties.Add(prop);
+			}
 		}
 
-		public Condition LogicGate { get; set; }
-
-		[JsonProperty(ReferenceLoopHandling = ReferenceLoopHandling.Ignore, IsReference = true)]
-		public List<T> Objects { get; } = new List<T>();
-
-		[JsonProperty(ReferenceLoopHandling = ReferenceLoopHandling.Ignore, IsReference = true)]
-		public List<Constraint<T>> SubConstraints { get; } = new List<Constraint<T>>();
-
-		public EmpirePropertyType Group { get; set; } = EmpirePropertyType.Unknown;
-
-		private bool Each<TEval>(TEval EvalItem, Func<T, TEval, bool> Validator)
+		public bool Requires(EmpireProperty Prop)
 		{
-			foreach (var constraint in Objects)
+			if (ConstraintGroups.TryGetValue(Prop.Type, out IEnumerable<ConstraintGroup> value))
 			{
-				if (!Validator(constraint, EvalItem))
-					return false;
-			}
-
-			foreach (var constraint in SubConstraints)
-			{
-				if (!constraint.Evaluate(EvalItem, Validator))
-					return false;
-			}
-
-			return true;
-		}
-		private bool Any<TEval>(TEval EvalItem, Func<T, TEval, bool> Validator)
-		{
-			foreach (var constraint in Objects)
-			{
-				if (Validator(constraint, EvalItem))
-					return true;
-			}
-
-			foreach (var constraint in SubConstraints)
-			{
-				if (constraint.Evaluate(EvalItem, Validator))
+				if (value.Any(c => c.LogicGate == Condition.Or && c.Properties.Count == 1 && c.Properties.Contains(Prop)))
 					return true;
 			}
 
 			return false;
 		}
-		public bool Evaluate<TEval>(TEval EvalItem, Func<T, TEval, bool> Validator)
-		{
-			if (Validator is null)
-				throw new ArgumentNullException(nameof(Validator));
+	}
 
+	public class ConstraintGroup
+	{
+		public ConstraintGroup(EmpirePropertyType Type)
+		{
+			this.Type = Type;
+		}
+		
+		public Condition LogicGate { get; set; }
+
+		[JsonProperty(ReferenceLoopHandling = ReferenceLoopHandling.Ignore, IsReference = true)]
+		public HashSet<EmpireProperty> Properties { get; } = new HashSet<EmpireProperty>();
+
+		public EmpirePropertyType Type { get; set; }
+
+		public bool Validate(EmpireProperty Prop)
+		{
 			switch (LogicGate)
 			{
-				case Condition.Each:
-					return Each(EvalItem, Validator);
 				case Condition.Or:
-					return Any(EvalItem, Validator);
-				case Condition.Not:
-					return !Each(EvalItem, Validator);
+					return ValidateOr(Prop);
 				case Condition.Nor:
-					return !Any(EvalItem, Validator);
+					return ValidateNor(Prop);
 				default:
+					return true;
+			}
+		}
+
+		private bool ValidateOr(EmpireProperty Prop)
+		{
+			foreach (var prop in Properties)
+			{
+				if (prop.Identifier == Prop.Identifier)
+					return true;
+			}
+
+			return false;
+		}
+		private bool ValidateNor(EmpireProperty Prop)
+		{
+			foreach (var prop in Properties)
+			{
+				if (prop.Identifier == Prop.Identifier)
 					return false;
 			}
-		}
 
-		public static Constraint<T> True
-		{
-			get
-			{
-				Constraint<T> constraint = new Constraint<T>(Condition.Each);
-				return constraint;
-			}
-		}
-
-		public static Constraint<T> False
-		{
-			get
-			{
-				Constraint<T> constraint = new Constraint<T>(Condition.Or);
-				return constraint;
-			}
+			return true;
 		}
 
 		public override string ToString()
 		{
-			if (Group != EmpirePropertyType.Unknown)
-				return Group.ToString();
-			else
-			{
-				if (Objects.Count > 0)
-				{
-					string output = LogicGate.ToString() + ": " + Objects[0];
-					foreach (var obj in Objects.Skip(1))
-						output += obj.ToString();
+			string output = LogicGate.ToString();
 
-					return output;
-				}
-				else
-					return LogicGate.ToString();
+			if (Properties.Any())
+			{
+				output += ":";
+				foreach (var prop in Properties)
+					output += " " + prop.Identifier;
 			}
+
+			return output;
 		}
 	}
 }

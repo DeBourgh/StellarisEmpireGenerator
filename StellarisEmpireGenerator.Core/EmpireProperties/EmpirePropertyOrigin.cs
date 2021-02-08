@@ -4,6 +4,7 @@ using StellarisEmpireGenerator.Core.ObjectModel;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Windows.Markup;
 
@@ -16,9 +17,33 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 
 		private EmpirePropertyOrigin(Entity SourceEntity) : base(SourceEntity, EmpirePropertyType.Origin) { }
 
-		//public IEnumerable<EmpirePropertyTrait> SecondarySpeciesTraits { get; private set; } = Enumerable.Empty<EmpirePropertyTrait>();
+		//protected override bool OnAdding(GeneratorNode Node)
+		//{
+		//	if (Node.HasOrigin)
+		//		return false;
 
-		private static bool IsOrigin(Entity Node)
+		//	return base.OnAdding(Node);
+		//}
+
+		protected override void OnAdded(GeneratorNode Node)
+		{
+			Node.HasOrigin = true;
+
+			foreach (var origin in Node.RemainingProperties.Where(p => p.IsOrigin).ToArray())
+				Node.Remove(origin);
+
+			base.OnAdded(Node);
+		}
+
+		protected override bool OnRemoving(GeneratorNode Node)
+		{
+			if (Node.HasOrigin)
+				return true;
+
+			return base.OnRemoving(Node);
+		}
+
+		private static bool IsNodeOrigin(Entity Node)
 		{
 			return
 				Node.Descendants.ContainsPair("is_origin", "yes") &&
@@ -27,12 +52,10 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 
 		internal static EmpirePropertyOrigin OriginFromNode(Entity Node)
 		{
-			if (IsOrigin(Node))
+			if (IsNodeOrigin(Node))
 				return new EmpirePropertyOrigin(Node);
 			else
 				return null;
 		}
-
-		protected override void UpdateRelationsToOtherEmpireProperties(IEnumerable<EmpireProperty> Properties) { }
 	}
 }

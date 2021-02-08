@@ -4,6 +4,7 @@ using StellarisEmpireGenerator.Core.ObjectModel;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace StellarisEmpireGenerator.Core.EmpireProperties
@@ -27,7 +28,43 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 		public int MaxTraitPoints { get; set; } = default;
 		public int TraitPoints { get; set; } = default;
 
+		//public override int MaxCountPerType => MaxCount;
+
 		public bool CanBeSecondarySpecies { get; set; } = true;
+
+		//protected override bool OnAdding(GeneratorNode Node)
+		//{
+		//	if (Node.HasSpecies)
+		//		return false;
+
+		//	return base.OnAdding(Node);
+		//}
+
+		protected override void OnAdded(GeneratorNode Node)
+		{
+			Node.HasSpecies = true;
+			Node.MaxTraits = MaxTraitPoints;
+			Node.TraitPointsAvailable = MaxTraitPoints;
+			Node.TraitPointsBalance = TraitPoints;
+
+			Node.TraitPointsAvailable -= Node.Solution.Count(p => p.Type == EmpirePropertyType.Trait);
+			Node.TraitPointsBalance -= Node.Solution.Where(p => p.Type == EmpirePropertyType.Trait).Sum(p => p.Cost);
+
+			Node.NextIterationRule = (p => p.Type == EmpirePropertyType.Trait);
+
+			foreach (var species in Node.RemainingProperties.Where(p => p.IsSpecies).ToArray())
+				Node.Remove(species);
+
+			base.OnAdded(Node);
+		}
+
+		protected override bool OnRemoving(GeneratorNode Node)
+		{
+			if (Node.HasSpecies)
+				return true;
+
+			return base.OnRemoving(Node);
+		}
 
 		private static string ExtractArchetype(Entity Node)
 		{
@@ -58,21 +95,20 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 				);
 		}
 
-		private static bool IsSpecies(Entity Node)
+		private static bool IsNodeSpecies(Entity Node)
 		{
 			return
 				Node.Children.ContainsKey("archetype") &&
+				Node.Children.ContainsKey("possible") &&
 				(!Node.Descendants.FirstOrDefaultPair("always", "no")?.Ancestors.ContainsKey("playable") ?? true);
 		}
 
 		internal static EmpirePropertySpecies SpeciesFromNode(Entity Node)
 		{
-			if (IsSpecies(Node))
+			if (IsNodeSpecies(Node))
 				return new EmpirePropertySpecies(Node);
 			else
 				return null;
 		}
-
-		protected override void UpdateRelationsToOtherEmpireProperties(IEnumerable<EmpireProperty> Properties) { }
 	}
 }

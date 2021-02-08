@@ -6,7 +6,7 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 {
 	public enum Condition
 	{
-		Each, // All, And
+		Required, // All, And
 		Or, // Any, Or
 		Not, // Not
 		Nor, // !All
