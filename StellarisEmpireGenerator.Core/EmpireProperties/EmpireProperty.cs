@@ -256,7 +256,7 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 
 		#endregion
 
-		#region Generating Solutions
+		#region Generate Solutions
 
 		public static IEnumerable<EmpireProperty> GenerateSolution(IEnumerable<EmpireProperty> Properties)
 		{
@@ -308,6 +308,12 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 			return Source.Where(p => p.Constraints.Requires(this));
 		}
 
+		protected virtual IEnumerable<EmpireProperty> ExclusiveProperties(IEnumerable<EmpireProperty> Source)
+		{
+			//foreach (var )
+			throw new NotImplementedException();
+		}
+
 		protected virtual bool OnAdding(EmpireProperty Pick, GeneratorNode Node)
 		{
 			foreach (var solItem in Node.Solution)
@@ -320,6 +326,10 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 		}
 		protected virtual void OnAdded(GeneratorNode Node)
 		{
+			var newRequiredConstraints = Constraints.ConstraintGroups.Values.SelectMany(cgs => cgs).Where(cg => cg.LogicGate == Condition.Or);
+			var newRequiredConstraintsList = new LinkedList<ConstraintGroup>(newRequiredConstraints);
+			Node.NonFulfilledRequiredConstraints.Add(this, newRequiredConstraintsList);
+
 			foreach (var nfrc in Node.NonFulfilledRequiredConstraints)
 			{
 				var matchedConstraints = nfrc.Value.Where(cg => (cg.Type == Type) && cg.Validate(this)).ToArray();
@@ -327,10 +337,17 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 				foreach (var matchedConstraint in matchedConstraints)
 					nfrc.Value.Remove(matchedConstraint);
 			}
+		}
 
-			var newRequiredConstraints = Constraints.ConstraintGroups.Values.SelectMany(cgs => cgs).Where(cg => cg.LogicGate == Condition.Or);
-			ICollection<ConstraintGroup> newRequiredConstraintsList = new LinkedList<ConstraintGroup>(newRequiredConstraints);
-			Node.NonFulfilledRequiredConstraints.Add(this, newRequiredConstraintsList);
+		protected virtual bool OnRemoving(GeneratorNode Node)
+		{
+			foreach (var solutionItem in Node.Solution)
+			{
+				if (!ValidateEachOther(this, solutionItem, Node))
+					return true;
+			}
+
+			return false;
 		}
 
 		//protected virtual bool IsValidWith(EmpireProperty Prop)
@@ -400,11 +417,9 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 				return true;
 			else if (Constraints.ConstraintGroups.TryGetValue(propType, out IEnumerable<ConstraintGroup> cgs))
 			{
-				int maxOfType = Node.AvailableByType(propType);
-				//if (Node.NonFulfilledRequiredConstraints.TryGetValue(this, out ICollection<ConstraintGroup> constraints))
+				//if (Node.Solution.Contains(this))
 				//{
-
-				//}
+				int maxOfType = Node.AvailableByType(propType);
 
 				foreach (var cg in cgs)
 				{
@@ -422,21 +437,39 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 					else if ((cg.LogicGate == Condition.Nor) && (!isValid))
 						return false;
 				}
+				//}
+				//else
+				//{
+				//	foreach (var cg in cgs.Where(c => c.LogicGate == Condition.Nor))
+				//	{
+				//		bool isValid = cg.Validate(Prop);
+				//		if (!isValid)
+				//			return false;
+				//	}
+
+				//	if (Node.NonFulfilledRequiredConstraints.TryGetValue(this, out ICollection<ConstraintGroup> nonFulfilledRequiredConstraints))
+				//	{
+				//		int maxOfType = Node.AvailableByType(propType);
+
+				//		foreach (var cg in nonFulfilledRequiredConstraints)
+				//		{
+				//			maxOfType -= cg.Properties.Min(p => p.Cost);
+
+				//			bool isValid = cg.Validate(Prop);
+				//			if (isValid)
+				//				return true;
+				//			else if (Prop.Cost > maxOfType)
+				//				return false;
+				//		}
+				//	}
+
+				//}
 			}
 
 			return true;
 		}
 
-		protected virtual bool OnRemoving(GeneratorNode Node)
-		{
-			foreach (var solutionItem in Node.Solution)
-			{
-				if (!ValidateEachOther(this, solutionItem, Node))
-					return true;
-			}
 
-			return false;
-		}
 
 		//protected virtual bool ValidateTo(EmpireProperty Prop)
 		//{
@@ -626,15 +659,16 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 
 		protected class GeneratorNode
 		{
-			private static Random CreateRnd()
+			private static Random CreateRnd(int? Seed = null)
 			{
-				int tc = Environment.TickCount;
+				int seed = Seed ?? Environment.TickCount;
 
-				Debug.WriteLine(tc);
+				Debug.WriteLine(seed);
 
-				return new Random(tc);
+				return new Random(seed);
 			}
-			public static readonly Random Rnd = CreateRnd();
+
+			public static readonly Random Rnd = CreateRnd(2109574937);
 
 			private GeneratorNode(IEnumerable<EmpireProperty> Properties)
 			{
@@ -662,9 +696,11 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 
 				Solution = new HashSet<EmpireProperty>(Parent.Solution);
 				RemainingProperties = new HashSet<EmpireProperty>(Parent.RemainingProperties);
-				NextIterationRule = Parent.NextIterationRule;
 				WeightSum = Parent.WeightSum;
 				NonFulfilledRequiredConstraints = new Dictionary<EmpireProperty, ICollection<ConstraintGroup>>(Parent.NonFulfilledRequiredConstraints);
+
+				NextIterationRules = Parent.NextIterationRules;
+
 				RemoveSet = Parent.RemoveSet;
 			}
 
@@ -724,16 +760,28 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 
 			public HashSet<EmpireProperty> RemainingProperties { get; private set; }
 
-			//public IDictionary<EmpirePropertyType, ICollection<ConstraintGroup>> NonFulfilledRequiredConstraints { get; } = new Dictionary<EmpirePropertyType, ICollection<ConstraintGroup>>();
-
 			public IDictionary<EmpireProperty, ICollection<ConstraintGroup>> NonFulfilledRequiredConstraints { get; } = new Dictionary<EmpireProperty, ICollection<ConstraintGroup>>();
-
-			//public EmpireProperty CurrentPick { get; private set; } = null;
 
 			public int WeightSum { get; private set; }
 
 			public HashSet<EmpireProperty> RemoveSet { get; private set; }
-			public Func<EmpireProperty, bool> NextIterationRule { get; set; } = null;
+
+			public void AddIterationRule(Func<GeneratorNode, bool> RuleCondition, Func<EmpireProperty, bool> Rule)
+			{
+				if (RuleCondition is null)
+					throw new ArgumentNullException(nameof(RuleCondition));
+
+				if (Rule is null)
+					throw new ArgumentNullException(nameof(Rule));
+
+				if (NextIterationRules is null)
+					NextIterationRules = new LinkedList<(Func<GeneratorNode, bool> Condition, Func<EmpireProperty, bool> Rule)>();
+
+				NextIterationRules.AddLast((RuleCondition, Rule));
+			}
+			private LinkedList<(Func<GeneratorNode, bool> Condition, Func<EmpireProperty, bool> Rule)> NextIterationRules { get; set; } = null;
+
+			
 
 			protected void RemoveImpossibleProperties()
 			{
@@ -743,7 +791,12 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 						RemoveSet.Add(prop);
 				}
 
-				Queue<EmpireProperty> removeQ = new Queue<EmpireProperty>(RemoveSet);
+				Queue<EmpireProperty> removeQ = new Queue<EmpireProperty>();
+				foreach (var toRemove in RemoveSet)
+				{
+					if (!Solution.Contains(toRemove))
+						removeQ.Enqueue(toRemove);
+				}
 
 				while (removeQ.Count > 0)
 				{
@@ -762,21 +815,18 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 				}
 
 				foreach (var rem in RemoveSet)
-					Remove(rem);
+					RemoveSingleProperty(rem);
 
 				RemoveSet.Clear();
 			}
 
-
-
-			private void Remove(EmpireProperty Prop)
+			private void RemoveSingleProperty(EmpireProperty Prop)
 			{
-				RemainingProperties.Remove(Prop);
+				if (RemainingProperties.Remove(Prop))
+					WeightSum -= Prop.Weight;
 
 				if ((CurrentSubset != null) && (CurrentSubset != RemainingProperties))
 					CurrentSubset.Remove(Prop);
-
-				WeightSum -= Prop.Weight;
 			}
 
 			private EmpireProperty Pick(IEnumerable<EmpireProperty> Source)
@@ -806,20 +856,105 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 
 			private HashSet<EmpireProperty> CurrentSubset { get; set; } = null;
 
+			//public GeneratorNode Next()
+			//{
+			//	if (NextIterationRules != null && NextIterationRules.Count > 0)
+			//	{
+			//		foreach((Func<GeneratorNode, bool> Condition, Func<EmpireProperty, bool> Rule) rule in NextIterationRules)
+			//		{
+			//			if (rule.Condition.Invoke(this))
+			//			{
+			//				rule.Rule
+			//			}
+			//		}
+			//	}
+			//	else
+			//		return Next(RemainingProperties);
+
+			//}
+
+			//private GeneratorNode Next (ICollection<EmpireProperty> Subset)
+			//{
+			//	while (CurrentSubset.Count > 0)
+			//	{
+			//		EmpireProperty pick = Pick(CurrentSubset);
+
+			//		 COMMENT OUT FOLLOWING LINE
+			//		if (Solution.Count == 1 && RemainingProperties.Any(p => p.Identifier == "civic_inwards_perfection"))
+			//			pick = RemainingProperties.First(p => p.Identifier == "civic_inwards_perfection");
+			//		else if (Solution.Count == 1 && RemainingProperties.Any(p => p.Identifier == "ethic_fanatic_xenophobe"))
+			//			pick = RemainingProperties.First(p => p.Identifier == "ethic_fanatic_xenophobe");
+
+			//		Queue<EmpireProperty> addQ = new Queue<EmpireProperty>();
+			//		addQ.Enqueue(pick);
+
+			//		do
+			//		{
+			//			EmpireProperty next = addQ.Dequeue();
+
+			//			if (next.OnAdding(next, this))
+			//			{
+			//				Solution.Add(next);
+			//				next.OnAdded(this);
+			//				Remove(pick);
+
+			//				var dependentProperties = next.DependentProperties();
+			//				foreach (var dependent in dependentProperties)
+			//				{
+			//					if (!Solution.Contains(dependent))
+			//					{
+			//						if (RemainingProperties.Contains(dependent))
+			//							addQ.Enqueue(dependent);
+			//						else
+			//							return Parent;
+			//					}
+			//				}
+			//			}
+			//			else
+			//				return Parent;
+
+
+			//		} while (addQ.Count > 0);
+
+			//		RemoveImpossibleProperties();
+
+			//		GeneratorNode nextNode = new GeneratorNode(this);
+			//		return nextNode;
+			//	}
+
+			//	return Parent;
+			//}
+
 			public GeneratorNode Next()
 			{
-				CurrentSubset = NextIterationRule == null
-					? RemainingProperties
-					: RemainingProperties.Where(NextIterationRule).ToHashSet();
+				if ((NextIterationRules != null) && (NextIterationRules.Count > 0))
+				{
+					do
+					{
+						var firstValue = NextIterationRules.First.Value;
+						NextIterationRules.RemoveFirst();
 
-				NextIterationRule = null;
+						if (firstValue.Condition.Invoke(this))
+						{
+							CurrentSubset = RemainingProperties.Where(firstValue.Rule).ToHashSet();
+							break;
+						}
+
+					} while (NextIterationRules.Count > 0);
+
+					if (NextIterationRules.Count == 0)
+						NextIterationRules = null;
+				}
+
+				if (CurrentSubset == null)
+					CurrentSubset = RemainingProperties;
 
 				while (CurrentSubset.Count > 0)
 				{
 					EmpireProperty pick = Pick(CurrentSubset);
 
 					// COMMENT OUT FOLLOWING LINE
-					//if (!Solution.Any())
+					//if (Solution.Count == 1 && RemainingProperties.Any(p => p.Identifier == "civic_inwards_perfection"))
 					//	pick = RemainingProperties.First(p => p.Identifier == "civic_inwards_perfection");
 					//else if (Solution.Count == 1 && RemainingProperties.Any(p => p.Identifier == "ethic_fanatic_xenophobe"))
 					//	pick = RemainingProperties.First(p => p.Identifier == "ethic_fanatic_xenophobe");
@@ -835,9 +970,14 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 						{
 							Solution.Add(next);
 							next.OnAdded(this);
-							Remove(pick);
+							RemoveSingleProperty(pick);
 
-							var dependentProperties = next.DependentProperties();
+							var dependentProperties = next.DependentProperties()
+								//.Concat(
+								//	RemainingProperties
+								//	.Where(p => p.DependentProperties().Contains(next)))
+								;
+							
 							foreach (var dependent in dependentProperties)
 							{
 								if (!Solution.Contains(dependent))
@@ -851,8 +991,6 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 						}
 						else
 							return Parent;
-
-
 					} while (addQ.Count > 0);
 
 					RemoveImpossibleProperties();

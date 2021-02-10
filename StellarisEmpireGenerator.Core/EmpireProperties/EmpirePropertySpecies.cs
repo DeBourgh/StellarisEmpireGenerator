@@ -40,6 +40,14 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 		//	return base.OnAdding(Node);
 		//}
 
+		protected override bool OnAdding(EmpireProperty Pick, GeneratorNode Node)
+		{
+			if (Node.HasSpecies)
+				return false;
+
+			return base.OnAdding(Pick, Node);
+		}
+
 		protected override void OnAdded(GeneratorNode Node)
 		{
 			Node.HasSpecies = true;
@@ -50,10 +58,13 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 			Node.TraitPointsAvailable -= Node.Solution.Count(p => p.Type == EmpirePropertyType.Trait);
 			Node.TraitPointsBalance -= Node.Solution.Where(p => p.Type == EmpirePropertyType.Trait).Sum(p => p.Cost);
 
-			Node.NextIterationRule = (p => p.Type == EmpirePropertyType.Trait);
+			Node.AddIterationRule(
+				n => !n.HasTraits,
+				p => p.IsTrait);
+			//Node.NextIterationRule = (p => p.Type == EmpirePropertyType.Trait);
 
-			foreach (var species in Node.RemainingProperties.Where(p => p.IsSpecies).ToArray())
-				Node.Remove(species);
+			foreach (var species in Node.RemainingProperties.Where(p => p.IsSpecies))
+				Node.RemoveSet.Add(species);
 
 			base.OnAdded(Node);
 		}

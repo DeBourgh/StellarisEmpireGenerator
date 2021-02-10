@@ -16,7 +16,7 @@
     <Grid>
         <DockPanel LastChildFill="True">
             <Grid DockPanel.Dock="Right">
-                <ListBox MinWidth="400" ItemsSource="{Binding Empires}">
+                <ListBox MinWidth="400" ItemsSource="{Binding Empires}" HorizontalContentAlignment="Stretch">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <v:EmpireView/>
@@ -182,29 +182,5 @@
                 </Grid>
             </DockPanel>
         </DockPanel>
-        <!--
-        <DockPanel HorizontalAlignment="Left" Height="276" Margin="10,205,0,0" VerticalAlignment="Top" Width="229" Name="PanelOriginsSetup">
-            <TextBlock Text="Origins Setup" DockPanel.Dock="Top" Margin="5"/>
-            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
-                <Button Content="Allow All" Padding="5" Margin="5"/>
-                <Button Content="Disallow All" Padding="5" Margin="5"/>
-            </StackPanel>
-            <ListBox ItemsSource="{Binding Origins}" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <vm:EmpirePropertyItemView/>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
-
-        </DockPanel>
-        <DockPanel HorizontalAlignment="Left" Height="276" Margin="244,205,0,0" VerticalAlignment="Top" Width="229" x:Name="PanelOriginsSetup_Copy">
-            <TextBlock DockPanel.Dock="Top" Margin="5"><Run Text="Civics "/><Run Text="Setup"/></TextBlock>
-            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
-                <Button Content="Allow All" Padding="5" Margin="5"/>
-                <Button Content="Disallow All" Padding="5" Margin="5"/>
-            </StackPanel>
-            <ListBox/>
-        </DockPanel>-->
     </Grid>
 </Window>

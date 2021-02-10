@@ -11,7 +11,7 @@
         <vm:EmpireViewModel/>
     </UserControl.DataContext>-->
     <DockPanel>
-        <Label Margin="3" DockPanel.Dock="Top" Content="{Binding Title}"/>
+        <Label Margin="3" DockPanel.Dock="Top" Content="{Binding Title}" FontSize="18"/>
         <Grid Margin="3">
             <Grid.Resources>
                 <Style TargetType="StackPanel">
@@ -27,31 +27,31 @@
                 <ColumnDefinition/>
                 <ColumnDefinition/>
             </Grid.ColumnDefinitions>
-            
+
             <StackPanel Grid.Row="0" Grid.Column="0">
-                <Label Content="Species:"/>
+                <Label Content="Species:" FontWeight="Bold"/>
                 <Label Content="{Binding SpeciesText}" Margin="6,0,0,0"/>
             </StackPanel>
             <StackPanel Grid.Row="0" Grid.Column="1">
-                <Label Content="Authority:"/>
+                <Label Content="Authority:" FontWeight="Bold"/>
                 <Label Content="{Binding AuthorityText}" Margin="6,0,0,0"/>
             </StackPanel>
             <StackPanel Grid.Row="1" Grid.Column="0">
-                <Label Content="Ethics:"/>
+                <Label Content="Ethics:" FontWeight="Bold"/>
                 <ListBox ItemsSource="{Binding EthicsTexts}" Margin="6,0,0,0"/>
             </StackPanel>
             <StackPanel Grid.Row="1" Grid.Column="1">
-                <Label Content="Civics:"/>
+                <Label Content="Civics:" FontWeight="Bold"/>
                 <ListBox ItemsSource="{Binding CivicsTexts}" Margin="6,0,0,0"/>
             </StackPanel>
             <StackPanel Grid.Row="2" Grid.Column="0">
-                <Label Content="Traits:"/>
+                <Label Content="Traits:" FontWeight="Bold"/>
                 <ListBox ItemsSource="{Binding TraitsTexts}" Margin="6,0,0,0"/>
             </StackPanel>
             <StackPanel Grid.Row="2" Grid.Column="1">
-                <Label Content="Origin:"/>
+                <Label Content="Origin:" FontWeight="Bold"/>
                 <Label Content="{Binding OriginText}" Margin="6,0,0,0"/>
             </StackPanel>
-        </Grid>   
+        </Grid>
     </DockPanel>
 </UserControl>

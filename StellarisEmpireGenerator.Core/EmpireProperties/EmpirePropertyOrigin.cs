@@ -29,8 +29,8 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 		{
 			Node.HasOrigin = true;
 
-			foreach (var origin in Node.RemainingProperties.Where(p => p.IsOrigin).ToArray())
-				Node.Remove(origin);
+			foreach (var origin in Node.RemainingProperties.Where(p => p.IsOrigin))
+				Node.RemoveSet.Add(origin);
 
 			base.OnAdded(Node);
 		}

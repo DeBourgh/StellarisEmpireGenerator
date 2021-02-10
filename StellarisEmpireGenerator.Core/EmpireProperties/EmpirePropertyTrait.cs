@@ -71,23 +71,13 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 
 		#endregion
 
-		//protected override bool OnAdd(GeneratorNode Node)
-		//{
-		//	//if (Node.TraitPointsAvailable == 1 && Node.SumTraitPoints == 0)
-		//	//	return false;
-
-		//	return base.OnAdd(Node);
-		//}
 
 		protected override bool OnAdding(EmpireProperty Pick, GeneratorNode Node)
 		{
-			if (Type == EmpirePropertyType.Trait)
-			{
-				if (Node.HasTraits)
-					return false;
-				else if (Node.TraitPointsAvailable == 1)
-					return Node.TraitPointsBalance - Cost == 0;
-			}
+			if (Node.HasTraits)
+				return false;
+			else if ((Node.TraitPointsAvailable == 1) && (Node.TraitPointsBalance - Cost != 0))
+				return false;
 
 			return base.OnAdding(Pick, Node);
 		}
@@ -96,17 +86,16 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 		{
 			if (!Node.HasSpecies)
 			{
-				Node.NextIterationRule = (p => p.Type == EmpirePropertyType.Species);
+				Node.AddIterationRule(
+					n => !n.HasSpecies,
+					p => p.IsSpecies);
 			}
-			else
+
+			if (Node.HasSpecies)
 			{
 				Node.TraitPointsAvailable--;
 				Node.TraitPointsBalance -= Cost;
 
-				//if (Node.TraitPointsAvailable == 0 && !Node.AreTraitsValid)
-				//	Node.NextIterationRule = (p => false);
-				//else
-				//{
 				if (Node.TraitPointsBalance == 0)
 				{
 					if (Node.TraitPointsAvailable <= 1)
@@ -120,20 +109,20 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 				}
 
 				if (!Node.HasTraits)
-					Node.NextIterationRule = (p => p.Type == EmpirePropertyType.Trait);
-				//}
+				{
+					Node.AddIterationRule(
+						n => !n.HasTraits,
+						p => p.IsTrait);
+				}
+			}
+
+			if (Node.HasTraits)
+			{
+				foreach (var trait in Node.RemainingProperties.Where(p => p.IsTrait))
+					Node.RemoveSet.Add(trait);
 			}
 
 			base.OnAdded(Node);
-		}
-
-		protected override bool IsValidWith(EmpireProperty Prop, GeneratorNode Node)
-		{
-
-			//if ( && (Prop.Type == EmpirePropertyType.Trait))
-			//	return false;
-
-			return base.IsValidWith(Prop, Node);
 		}
 
 		internal static EmpirePropertyTrait TraitFromNode(Entity Node)

@@ -490,6 +490,7 @@ namespace StellarisEmpireGenerator.ViewModels
 
 			Empires.Clear();
 
+			int i = 1;
 			foreach (var empire in empires)
 			{
 				EmpireViewModel empireVm = new EmpireViewModel(
@@ -498,13 +499,14 @@ namespace StellarisEmpireGenerator.ViewModels
 					empire.Where(e => e.Type == EmpirePropertyType.Ethics),
 					empire.First(e => e.Type == EmpirePropertyType.Origin),
 					empire.First(e => e.Type == EmpirePropertyType.Species),
-					empire.Where(e => e.Type == EmpirePropertyType.Trait)
-				);
+					empire.Where(e => e.Type == EmpirePropertyType.Trait))
+				{
+					Title = $"Empire #{i++}"
+				};
 
 				empireVm.ApplyLanguageDict(LangDict);
 				Empires.Add(empireVm);
 			}
-
 		}
 
 		#endregion

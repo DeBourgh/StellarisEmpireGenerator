@@ -71,7 +71,19 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 		{
 			Node.EthicPointsAvailable -= Cost;
 
+			if (Node.HasEthics)
+			{
+				foreach (var ethic in Node.RemainingProperties.Where(p => p.IsEthic))
+					Node.RemoveSet.Add(ethic);
+			}
 
+			var ethicsToRemove = Node.RemainingProperties
+				.Where(p =>
+					p.IsEthic &&
+						((p.AsEthic.EthicCategory == EthicCategory) ||
+						(Node.EthicPointsAvailable < p.AsEthic.Cost)));
+			foreach (var ethic in ethicsToRemove)
+				Node.RemoveSet.Add(ethic);
 
 			base.OnAdded(Node);
 		}
