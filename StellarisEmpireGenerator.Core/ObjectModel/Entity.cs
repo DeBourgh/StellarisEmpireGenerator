@@ -212,7 +212,7 @@ namespace StellarisEmpireGenerator.Core.ObjectModel
 
 				deserializedTokenSets.Add(Parse(tokens, ref index, sourceFile));
 			}
-
+			
 			return new Entity("root", deserializedTokenSets.SelectMany(e => e));
 		}
 
@@ -291,7 +291,7 @@ namespace StellarisEmpireGenerator.Core.ObjectModel
 		{
 			StringBuilder sb = new StringBuilder();
 			Serialize2(this, sb, 0);
-
+			
 			return sb.ToString();
 		}
 

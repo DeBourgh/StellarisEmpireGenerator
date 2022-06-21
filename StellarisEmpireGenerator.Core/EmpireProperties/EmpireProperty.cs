@@ -668,7 +668,8 @@ namespace StellarisEmpireGenerator.Core.EmpireProperties
 				return new Random(seed);
 			}
 
-			public static readonly Random Rnd = CreateRnd(2109574937);
+			public static readonly Random Rnd = CreateRnd(Environment.TickCount);
+			//public static readonly Random Rnd = CreateRnd(2109574937); // Error case for investigation
 
 			private GeneratorNode(IEnumerable<EmpireProperty> Properties)
 			{
